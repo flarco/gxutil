@@ -39,4 +39,5 @@ jobs:
     
     - name: Packer Build
       run: |
+        go get -u github.com/gobuffalo/packr/packr
         GOOS=linux GOARCH=amd64 packr build
