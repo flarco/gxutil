@@ -5,7 +5,6 @@ import (
 	"path"
 	"runtime"
 	"strings"
-	_ "github.com/lib/pq"
 	"github.com/jmoiron/sqlx"
 	"gopkg.in/yaml.v2"
 	"github.com/gobuffalo/packr"
@@ -14,11 +13,11 @@ import (
 
 // Connection is a database connection
 type Connection struct {
-	url string
-	genre string // the type of database for sqlx: postgres, mysql, sqlite
-	db *sqlx.DB
+	URL string
+	Genre string // the type of database for sqlx: postgres, mysql, sqlite
+	Db *sqlx.DB
 	Data Dataset
-	template Template
+	Template Template
 }
 
 // Template is a database YAML template
@@ -32,27 +31,27 @@ type Template struct {
 
 // Connect connects to a database using sqlx
 func (conn *Connection) Connect() error {
-	if conn.genre == "" {
-		if strings.HasPrefix(conn.url, "postgresql://") { conn.genre = "postgres" }
+	if conn.Genre == "" {
+		if strings.HasPrefix(conn.URL, "postgresql://") { conn.Genre = "postgres" }
 	}
-	if conn.genre != "" {
+	if conn.Genre != "" {
 		conn.LoadYAML()
 	}
-	db, err := sqlx.Open(conn.genre, conn.url)
-	conn.db = db
+	db, err := sqlx.Open(conn.Genre, conn.URL)
+	conn.Db = db
 	if err != nil {
 			log.Fatalln(err)
 			return err
 	}
-	err = conn.db.Ping()
-	println(R(`connected to {g}`, "g", conn.genre))
+	err = conn.Db.Ping()
+	println(R(`connected to {g}`, "g", conn.Genre))
 	return err
 }
 
 
 // Close closes the connection
 func (conn *Connection) Close() error {
-	return conn.db.Close()
+	return conn.Db.Close()
 }
 
 // LoadYAML loads the approriate yaml template
@@ -62,33 +61,33 @@ func (conn *Connection) LoadYAML() error {
 	
 	baseTemplateBytes, err := box.FindString("base.yaml")
 	Check(err, "box.FindString")
-  err = yaml.Unmarshal([]byte(baseTemplateBytes), &conn.template)
+  err = yaml.Unmarshal([]byte(baseTemplateBytes), &conn.Template)
 	Check(err, "yaml.Unmarshal")
 	
-	templateBytes, err := box.FindString(conn.genre+".yaml")
+	templateBytes, err := box.FindString(conn.Genre+".yaml")
 	Check(err, "box.FindString")
 	template := Template{}
   err = yaml.Unmarshal([]byte(templateBytes), &template)
 	Check(err, "yaml.Unmarshal")
 
 	if len(template.Core) > 0 {
-		conn.template.Core = template.Core
+		conn.Template.Core = template.Core
 	}
 
 	if len(template.Analysis) > 0 {
-		conn.template.Analysis = template.Analysis
+		conn.Template.Analysis = template.Analysis
 	}
 
 	if len(template.Function) > 0 {
-		conn.template.Function = template.Function
+		conn.Template.Function = template.Function
 	}
 
 	if len(template.Metadata) > 0 {
-		conn.template.Metadata = template.Metadata
+		conn.Template.Metadata = template.Metadata
 	}
 
 	if len(template.GeneralTypeMap) > 0 {
-		conn.template.GeneralTypeMap = template.GeneralTypeMap
+		conn.Template.GeneralTypeMap = template.GeneralTypeMap
 	}
 
 	return nil
@@ -96,8 +95,8 @@ func (conn *Connection) LoadYAML() error {
 
 // Query runs a sql query, returns `result`, `error`
 func (conn *Connection) Query(sql string) (Dataset, error) {
-	result, err := conn.db.Queryx(sql)
-	Check(err, "conn.db.Queryx(sql)")
+	result, err := conn.Db.Queryx(sql)
+	Check(err, "conn.Db.Queryx(sql)")
 
 	fields, err := result.Columns()
 	Check(err, "result.Columns()")
@@ -145,27 +144,27 @@ func splitTableFullName (tableName string) (string, string) {
 
 // GetSchemas returns schemas
 func (conn *Connection) GetSchemas() (Dataset, error) {
-	return conn.Query(conn.template.Metadata["get_schemas"])
+	return conn.Query(conn.Template.Metadata["get_schemas"])
 }
 
 // GetObjects returns objects (tables or views) for given schema
 // `objectType` can be either 'table', 'view' or 'all'
 func (conn *Connection) GetObjects(schema string, objectType string) (Dataset, error) {
-	sql := R(conn.template.Metadata["get_objects"], "schema", schema, "object_type", objectType)
+	sql := R(conn.Template.Metadata["get_objects"], "schema", schema, "object_type", objectType)
 	return conn.Query(sql)
 }
 
 
 // GetTables returns tables for given schema
 func (conn *Connection) GetTables(schema string) (Dataset, error) {
-	sql := R(conn.template.Metadata["get_tables"], "schema", schema)
+	sql := R(conn.Template.Metadata["get_tables"], "schema", schema)
 	return conn.Query(sql)
 }
 
 
 // GetViews returns views for given schema
 func (conn *Connection) GetViews(schema string) (Dataset, error) {
-	sql := R(conn.template.Metadata["get_views"], "schema", schema)
+	sql := R(conn.Template.Metadata["get_views"], "schema", schema)
 	return conn.Query(sql)
 }
 
@@ -176,7 +175,7 @@ func (conn *Connection) GetColumns(tableName string) (Dataset, error) {
 	schema, table := splitTableFullName(tableName)
 
 	sql := R(
-		conn.template.Metadata["get_columns"],
+		conn.Template.Metadata["get_columns"],
 		"schema", schema,
 		"table", table,
 	)
@@ -190,7 +189,7 @@ func (conn *Connection) GetColumnsFull(tableName string) (Dataset, error) {
 	schema, table := splitTableFullName(tableName)
 
 	sql := R(
-		conn.template.Metadata["get_columns_full"],
+		conn.Template.Metadata["get_columns_full"],
 		"schema", schema,
 		"table", table,
 	)
@@ -201,7 +200,7 @@ func (conn *Connection) GetColumnsFull(tableName string) (Dataset, error) {
 
 // GetPrimarkKeys returns primark keys for given table.
 func (conn *Connection) GetPrimarkKeys(tableName string) (Dataset, error) {
-	sql := R(conn.template.Metadata["get_primary_keys"], "table", tableName)
+	sql := R(conn.Template.Metadata["get_primary_keys"], "table", tableName)
 	return conn.Query(sql)
 }
 
@@ -209,14 +208,14 @@ func (conn *Connection) GetPrimarkKeys(tableName string) (Dataset, error) {
 
 // GetIndexes returns indexes for given table.
 func (conn *Connection) GetIndexes(tableName string) (Dataset, error) {
-	sql := R(conn.template.Metadata["get_indexes"], "table", tableName)
+	sql := R(conn.Template.Metadata["get_indexes"], "table", tableName)
 	return conn.Query(sql)
 }
 
 
 // GetDDL returns DDL for given table.
 func (conn *Connection) GetDDL(tableName string) (Dataset, error) {
-	sql := R(conn.template.Metadata["get_ddl"], "table", tableName)
+	sql := R(conn.Template.Metadata["get_ddl"], "table", tableName)
 	return conn.Query(sql)
 }
 
@@ -229,7 +228,7 @@ func (conn *Connection) DropTable(tableNames ...string) (Dataset, error) {
 	)
 
 	for _, tableName := range tableNames {
-		sql := R(conn.template.Core["drop_table"], "table", tableName)
+		sql := R(conn.Template.Core["drop_table"], "table", tableName)
 		result, err = conn.Query(sql)
 		Check(err, "Error for " + sql)
 	}

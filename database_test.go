@@ -24,7 +24,7 @@ var (
 )
 func TestPG(t *testing.T) {
 	conn := Connection{
-		url: PostgresURL,
+		URL: PostgresURL,
 	}
 	err := conn.Connect()
 	assert.NoError(t, err)
@@ -32,10 +32,10 @@ func TestPG(t *testing.T) {
 	_, err = conn.DropTable("person", "place")
 	assert.NoError(t, err)
 
-	conn.db.MustExec(tablesDDL)
-	conn.db.MustExec(`truncate table place`)
+	conn.Db.MustExec(tablesDDL)
+	conn.Db.MustExec(`truncate table place`)
 
-	tx := conn.db.MustBegin()
+	tx := conn.Db.MustBegin()
 	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "Jason", "Moiron", "jmoiron@jmoiron.net")
 	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "John", "Doe", "johndoeDNE@gmail.net")
 	tx.MustExec("INSERT INTO place (country, city, telcode) VALUES ($1, $2, $3)", "United States", "New York", "1")
