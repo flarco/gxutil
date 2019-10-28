@@ -1,0 +1,41 @@
+name: Servers Git Sync
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:10.8
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+        - 5432:5432
+        # needed because the postgres container does not provide a healthcheck
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v1
+
+    - name: Set up GoLang
+      uses: actions/setup-go@v1
+      with:
+        go-version: '1.13.1'
+    
+    - name: Run Go Tests
+      run: go test -v
+      env:
+        # use postgres for the host here because we have specified a container for the job.
+        # If we were running the job on the VM this would be localhost
+        POSTGRES_HOST: postgres
+        POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+        POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/postgres
+    
+    - name: Packer Build
+      run: |
+        GOOS=linux GOARCH=amd64 packr build
