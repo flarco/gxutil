@@ -23,15 +23,17 @@ var (
 	SMTPPort = 465
 
 	// SMTPUser is SMTP user name
-	// SMTPUser = os.Getenv("SMTP_USER")
 	SMTPUser = os.Getenv("SMTP_USER")
 
 	// SMTPPass is user password
-	// SMTPPass = os.Getenv("SMTP_PASS")
 	SMTPPass = os.Getenv("SMTP_PASS")
+
+	// AlertEmail is the email address to send errors to
+	AlertEmail = os.Getenv("ALERT_EMAIL")
 )
 
-func getType(myvar interface{}) string {
+// GetType : return the type of an interface
+func GetType(myvar interface{}) string {
 	t := reflect.TypeOf(myvar)
 	if t.Kind() == reflect.Ptr {
 		return "*" + t.Elem().Name()
@@ -45,19 +47,28 @@ func F(format string, args ...interface{}) string {
 }
 
 // R : Replacer
-// R("File {file} had error {error}", "{file}", file, "{error}", err)
+// R("File {file} had error {error}", "file", file, "error", err)
 func R(format string, args ...string) string {
-	r := strings.NewReplacer(args...)
+	args2 := make([]string, len(args))
+	for i, v := range args {
+			if i%2 == 0 {
+					args2[i] = fmt.Sprintf("{%v}", v)
+			} else {
+					args2[i] = fmt.Sprint(v)
+			}
+	}
+	r := strings.NewReplacer(args2...)
 	return r.Replace(format)
 }
 
-func printV(v interface{}) {
+// PrintV prints the value of object
+func PrintV(v interface{}) {
 	println(F("%#v", v))
 }
 
 // Propagate is a modified version of stacktrace Propagate
 func Propagate(err error, msg string) error {
-	return stacktrace.Propagate(err, msg, 3)
+	return stacktrace.Propagate(err, msg, 4)
 }
 
 // IsErr : checks for error
@@ -177,7 +188,7 @@ func LogErrorExit(E error) {
 // LogErrorMail handles logging of an error and mail it to self
 func LogErrorMail(E error) {
 	LogCRedErr(E.Error())
-	SendMail(SMTPUser, []string{"flarco@live.com"}, "Error | "+os.Args[0], E.Error())
+	SendMail(SMTPUser, []string{AlertEmail}, "Error | "+os.Args[0], E.Error())
 }
 
 // LogIfError handles logging of an error if it i not nil, useful for reporting
@@ -204,4 +215,11 @@ func SendMail(from string, to []string, subject string, textHTML string) error {
 	// Send the email
 	err := d.DialAndSend(m)
 	return err
+}
+
+// Check panics on error
+func Check(e error, msg string) {
+	if e != nil {
+			panic(Propagate(e, msg))
+	}
 }

@@ -1,0 +1,196 @@
+core:
+  drop_table: drop table {table} cascade constraints purge
+  create_table: create table {table} ({col_types})
+  create_index: create index {index} on {table} ({cols})
+  insert: INSERT {options} INTO {table} ({names}) VALUES ({values})
+  insert_option: /*+ APPEND NOLOGGING */
+  sample: SELECT {fields} FROM {table} SAMPLE(50) where rownum <= {n}
+  limit: SELECT {fields} FROM {table} where rownum <= {n}
+  replace: |
+    merge into {table} tgt
+    USING (SELECT {name_values}
+            FROM dual) src
+    ON ({src_tgt_condition})
+    WHEN MATCHED THEN
+      UPDATE SET {set_fields}
+    WHEN NOT MATCHED THEN
+        insert ({names}) values ({values})
+  ddl: |
+    select to_char(dbms_metadata.get_ddl(
+    upper('{obj_type}'),upper('{table}'),upper('{schema}'))) as ddl
+    from dual
+
+metadata:
+  all_tables: |
+    with tables as (
+      select
+        owner,
+        table_name,
+        num_rows,
+        last_analyzed
+      from sys.all_tables
+    )
+    select
+      col.owner as schema_name,
+      col.table_name as table_name,
+      case
+        when tables.table_name is null then 'VIEW'
+        else 'TABLE'
+      end as table_type,
+      count(col.column_name) as num_columns,
+      tables.num_rows as num_rows,
+      tables.last_analyzed
+    from sys.all_tab_columns col 
+    left join tables
+      on tables.owner = col.owner
+      and tables.table_name = col.table_name
+    group by
+      col.owner,
+      col.table_name, 
+      case
+        when tables.table_name is null then 'VIEW'
+        else 'TABLE'
+      end,
+      tables.num_rows,
+      tables.last_analyzed
+    order by col.owner, col.table_name
+  all_columns: |
+    with tables as (
+      select
+        owner,
+        table_name,
+        num_rows
+      from sys.all_tables
+    )
+    select
+      col.owner as schema_name,
+      col.table_name as table_name,
+      case
+        when tables.table_name is null then 'VIEW'
+        else 'TABLE'
+      end as table_type,
+      col.column_name as column_name,
+      col.data_type as column_type,
+      col.column_id as column_id,
+      col.num_distinct as num_distinct,
+      col.num_nulls as num_nulls,
+      tables.num_rows as num_rows,
+      case
+        when tables.num_rows = 0 then null
+        else col.num_distinct / tables.num_rows
+      end as prct_distinct,
+      case
+        when tables.num_rows = 0 then null
+        else col.num_nulls / tables.num_rows
+      end as prct_nulls,
+      col.last_analyzed
+    from sys.all_tab_columns col 
+    left join tables
+      on tables.owner = col.owner
+      and tables.table_name = col.table_name
+    order by col.owner, col.table_name, col.column_id
+
+analysis:
+  field_stat_deep: |
+    select
+      '{schema}' as schema_nm,
+      '{table}' as table_nm,
+      '{field}' as field,
+      '{type}' as type,
+      count(*) as tot_cnt,
+      count({field}) as f_cnt,
+      count(*) - count({field}) as f_null_cnt,
+      round((count(*) - count({field})) / count(*)*100,1) as f_null_prct,
+      count(distinct {field}) as f_dstct_cnt,
+      round(count(distinct {field}) / count(*)*100,1) as f_dstct_prct,
+      count(*) - count(distinct {field}) as f_dup_cnt,
+      cast(min({field}) as varchar(4000)) as f_min,
+      cast(max({field}) as varchar(4000)) as f_max,
+      min(length({field})) as f_min_len,
+      max(length({field})) as f_max_len
+    from {schema}.{table}
+
+  distro_field_date: |
+    -- distro_field_date {field}
+    with t1 as (
+        select
+          '{field}' as field,
+          extract(year from {field}) as year,
+          extract(month from {field}) as month,
+          count(1) cnt
+        from {schema}.{table}
+        group by extract(year from {field}), extract(month from {field})
+        order by extract(year from {field}), extract(month from {field})
+      )
+      , t2 as (
+        select '{field}' as field, count(1) ttl_cnt
+        from {schema}.{table}
+      )
+      select 
+        '{schema}' as schema_nm,
+        '{table}' as table_nm,
+        t1.field,
+        t1.year,
+        t1.month,
+        cnt,
+        round(100.0 * cnt / ttl_cnt, 2) as prct
+      from t1
+      join t2
+        on t1.field = t2.field
+      order by t1.year, t1.month
+
+  distro_field_date_wide: |
+    -- distro_field_date {table}
+    select
+      '{date_field}' as date_field,
+          extract(year from {field}) as year,
+          extract(month from {field}) as month,
+      {cnt_fields_sql}
+    from {schema}.{table}
+    {where_clause}
+    group by extract(year from {field}), extract(month from {field})
+    order by extract(year from {field}), extract(month from {field})
+
+routine:
+  date_trunc_min_max: |
+    select
+      {fields}
+    from {table}
+    where {where}
+      (({date_field_trunc} >= date '{min_val}'
+      and {date_field_trunc} <= date '{max_val}')
+    {or_null})
+
+function:
+  truncate_f: trunc({field})
+  truncate_datef: trunc({field})
+  str_utf8: convert({field},'US7ASCII','WE8ISO8859P1')
+  date_to_int: to_number(to_char({field}, 'j'))
+  number_to_int: round({field}, 0)
+
+native_type_map:
+  number: "decimal"
+  char: "string"
+  varchar: "string"
+  varchar2: "string"
+  long_string: "string"
+  nchar: "string"
+  fixed_char: "string"
+  datetime: "datetime"
+  timestamp: "datetime"
+  native_float: "double"
+  long: "text"
+  lob: "text"
+  clob: "text"
+  blob: "text"
+  nclob: "text"
+  binary: "text"
+
+general_type_map:
+  string: "varchar2()"
+  integer: "number()"
+  decimal: "number()"
+  date: "date"
+  datetime: "date"
+  timestamp: "date"
+  text: "nclob"
