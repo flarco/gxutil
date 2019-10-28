@@ -1,2 +1,2 @@
-# xutil-go
+# gxutil
 xutil for Go

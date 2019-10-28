@@ -1,4 +1,4 @@
-module github.com/flarco/xutil-go
+module github.com/flarco/gxutil
 
 go 1.12
 
