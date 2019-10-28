@@ -2,14 +2,13 @@ package main
 
 import (
 	"log"
-	// "fmt"
+	"path"
+	"runtime"
 	"strings"
 	_ "github.com/lib/pq"
 	"github.com/jmoiron/sqlx"
 	"gopkg.in/yaml.v2"
-	// "io/ioutil"
 	"github.com/gobuffalo/packr"
-	// statik "/__/devbox/xutil-go/statik"
 )
 
 
@@ -58,7 +57,8 @@ func (conn *Connection) Close() error {
 
 // LoadYAML loads the approriate yaml template
 func (conn *Connection) LoadYAML() error {
-	box := packr.NewBox("./templates")
+	_, filename, _, _ := runtime.Caller(1)
+	box := packr.NewBox(path.Join(path.Dir(filename), "templates"))
 	
 	baseTemplateBytes, err := box.FindString("base.yaml")
 	Check(err, "box.FindString")
