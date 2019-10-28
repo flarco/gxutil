@@ -5,6 +5,7 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	_ "github.com/lib/pq"
 	"github.com/jmoiron/sqlx"
 	"gopkg.in/yaml.v2"
 	"github.com/gobuffalo/packr"
