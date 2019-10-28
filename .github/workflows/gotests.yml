@@ -35,7 +35,7 @@ jobs:
         # If we were running the job on the VM this would be localhost
         POSTGRES_HOST: localhost
         POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
-        POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable
     
     - name: Packer Build
       run: |
