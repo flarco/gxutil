@@ -33,7 +33,7 @@ jobs:
         POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
         POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable
     
-    - name: Packer Build
-      run: |
-        go get -u github.com/gobuffalo/packr/packr
-        GOOS=linux GOARCH=amd64 packr build
+    # - name: Packer Build
+    #   run: |
+    #     go get -u github.com/gobuffalo/packr/packr
+    #     GOOS=linux GOARCH=amd64 packr build
