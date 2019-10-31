@@ -217,9 +217,21 @@ func SendMail(from string, to []string, subject string, textHTML string) error {
 	return err
 }
 
-// Check panics on error
+// Check logs an error
 func Check(e error, msg string) {
+	if e != nil {
+			println(Propagate(e, msg))
+	}
+}
+
+// Panic panics on error
+func Panic(e error, msg string) {
 	if e != nil {
 			panic(Propagate(e, msg))
 	}
+}
+
+// Error returns stacktrace error with message
+func Error(e error, msg string) error {
+	return stacktrace.Propagate(e, msg, 3)
 }

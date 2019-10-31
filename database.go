@@ -1,7 +1,6 @@
 package gxutil
 
 import (
-	"log"
 	"path"
 	"runtime"
 	"strings"
@@ -15,7 +14,7 @@ import (
 // Connection is a database connection
 type Connection struct {
 	URL string
-	Genre string // the type of database for sqlx: postgres, mysql, sqlite
+	Type string // the type of database for sqlx: postgres, mysql, sqlite
 	Db *sqlx.DB
 	Data Dataset
 	Template Template
@@ -32,21 +31,22 @@ type Template struct {
 
 // Connect connects to a database using sqlx
 func (conn *Connection) Connect() error {
-	if conn.Genre == "" {
-		if strings.HasPrefix(conn.URL, "postgresql://") { conn.Genre = "postgres" }
+	if conn.Type == "" {
+		if strings.HasPrefix(conn.URL, "postgresql://") { conn.Type = "postgres" }
 	}
-	if conn.Genre != "" {
+	if conn.Type != "" {
 		conn.LoadYAML()
 	}
-	db, err := sqlx.Open(conn.Genre, conn.URL)
+	db, err := sqlx.Open(conn.Type, conn.URL)
+	if err != nil {	return Error(err, "Could not connect to DB") }
+
 	conn.Db = db
-	if err != nil {
-			log.Fatalln(err)
-			return err
-	}
+	
 	err = conn.Db.Ping()
-	println(R(`connected to {g}`, "g", conn.Genre))
-	return err
+	if err != nil {	return Error(err, "Could not ping DB") }
+
+	println(R(`connected to {g}`, "g", conn.Type))
+	return nil
 }
 
 
@@ -61,15 +61,18 @@ func (conn *Connection) LoadYAML() error {
 	box := packr.NewBox(path.Join(path.Dir(filename), "templates"))
 	
 	baseTemplateBytes, err := box.FindString("base.yaml")
-	Check(err, "box.FindString")
-  err = yaml.Unmarshal([]byte(baseTemplateBytes), &conn.Template)
-	Check(err, "yaml.Unmarshal")
+	if err != nil {	return Error(err, "box.FindString('base.yaml')") }
+
+	if err := yaml.Unmarshal([]byte(baseTemplateBytes), &conn.Template); err != nil {
+		return Error(err, "yaml.Unmarshal")
+	}
 	
-	templateBytes, err := box.FindString(conn.Genre+".yaml")
-	Check(err, "box.FindString")
+	templateBytes, err := box.FindString(conn.Type+".yaml")
+	if err != nil {	return Error(err, "box.FindString('.yaml') for " + conn.Type) }
+
 	template := Template{}
   err = yaml.Unmarshal([]byte(templateBytes), &template)
-	Check(err, "yaml.Unmarshal")
+	if err != nil {	return Error(err, "yaml.Unmarshal") }
 
 	if len(template.Core) > 0 {
 		conn.Template.Core = template.Core
@@ -97,10 +100,10 @@ func (conn *Connection) LoadYAML() error {
 // Query runs a sql query, returns `result`, `error`
 func (conn *Connection) Query(sql string) (Dataset, error) {
 	result, err := conn.Db.Queryx(sql)
-	Check(err, "conn.Db.Queryx(sql)")
+	if err != nil {	return conn.Data, Error(err, "conn.Db.Queryx(sql)") }
 
 	fields, err := result.Columns()
-	Check(err, "result.Columns()")
+	if err != nil {	return conn.Data, Error(err, "result.Columns()") }
 	
 	conn.Data.Result = result
 	conn.Data.Fields = fields
@@ -111,7 +114,7 @@ func (conn *Connection) Query(sql string) (Dataset, error) {
 		// get records
 		rec := map[string]interface{}{}
 		err := result.MapScan(rec)
-		Check(err, "MapScan(rec)")
+		if err != nil {	return conn.Data, Error(err, "MapScan(rec)") }
 		
 		// add record
 		conn.Data.Records = append(conn.Data.Records, rec)
@@ -124,7 +127,7 @@ func (conn *Connection) Query(sql string) (Dataset, error) {
 		conn.Data.Rows = append(conn.Data.Rows, row)
 
 	}
-	return conn.Data, err
+	return conn.Data, nil
 }
 
 func splitTableFullName (tableName string) (string, string) {
@@ -231,9 +234,9 @@ func (conn *Connection) DropTable(tableNames ...string) (Dataset, error) {
 	for _, tableName := range tableNames {
 		sql := R(conn.Template.Core["drop_table"], "table", tableName)
 		result, err = conn.Query(sql)
-		Check(err, "Error for " + sql)
+		if err != nil {	return result, Error(err, "Error for " + sql) }
 	}
-	return result, err
+	return result, nil
 }
 
 
