@@ -1,9 +1,11 @@
 package gxutil
 
 import (
+	"fmt"
 	"path"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/gobuffalo/packr"
 	"github.com/jmoiron/sqlx"
@@ -131,6 +133,34 @@ func (conn *Connection) Query(sql string) (Dataset, error) {
 		err := result.MapScan(rec)
 		if err != nil {
 			return conn.Data, Error(err, "MapScan(rec)")
+		}
+
+		// Ensure usable types
+		for i, val := range rec {
+
+			switch v := val.(type) {
+			case time.Time:
+				rec[i] = val.(time.Time)
+			case nil:
+				rec[i] = nil
+			case int64:
+				rec[i] = val.(int64)
+			case []uint8:
+				arr := val.([]uint8)
+				buf := make([]byte, len(arr))
+				for j, n := range arr {
+					buf[j] = byte(n)
+				}
+				rec[i] = string(buf)
+				// PrintV(string(buf))
+				// fmt.Printf("%T - %v - %v\n", v, val, rec[i])
+			default:
+				rec[i] = val.(string)
+				_ = fmt.Sprint(v)
+				// fmt.Printf("%T - %v - %v - %v\n", v, val, reflect.TypeOf(val), rec[i])
+			}
+
+			// PrintV(rec[i])
 		}
 
 		// add record

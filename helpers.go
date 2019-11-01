@@ -9,7 +9,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time" 
+	"time"
+
 	color "github.com/fatih/color"
 	"github.com/flarco/stacktrace"
 	gomail "gopkg.in/gomail.v2"
@@ -51,11 +52,11 @@ func F(format string, args ...interface{}) string {
 func R(format string, args ...string) string {
 	args2 := make([]string, len(args))
 	for i, v := range args {
-			if i%2 == 0 {
-					args2[i] = fmt.Sprintf("{%v}", v)
-			} else {
-					args2[i] = fmt.Sprint(v)
-			}
+		if i%2 == 0 {
+			args2[i] = fmt.Sprintf("{%v}", v)
+		} else {
+			args2[i] = fmt.Sprint(v)
+		}
 	}
 	r := strings.NewReplacer(args2...)
 	return r.Replace(format)
@@ -220,14 +221,14 @@ func SendMail(from string, to []string, subject string, textHTML string) error {
 // Check logs an error
 func Check(e error, msg string) {
 	if e != nil {
-			println(Propagate(e, msg))
+		println(Propagate(e, msg))
 	}
 }
 
 // Panic panics on error
 func Panic(e error, msg string) {
 	if e != nil {
-			panic(Propagate(e, msg))
+		panic(Propagate(e, msg))
 	}
 }
 

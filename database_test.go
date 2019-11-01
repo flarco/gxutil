@@ -3,6 +3,7 @@ package gxutil
 import (
 	"os"
 	"testing"
+
 	"github.com/stretchr/testify/assert"
 	// "github.com/gobuffalo/packr"
 )
@@ -20,8 +21,21 @@ var (
 			country text,
 			city text NULL,
 			telcode integer
+	);
+	
+	CREATE TABLE if not exists transactions (
+		"date" date NULL,
+		description varchar NULL,
+		original_description varchar NULL,
+		amount numeric NULL,
+		transaction_type varchar NULL,
+		category varchar NULL,
+		account_name varchar NULL,
+		labels varchar NULL,
+		notes varchar NULL
 	)`
 )
+
 func TestPG(t *testing.T) {
 	conn := Connection{
 		URL: PostgresURL,
@@ -29,7 +43,7 @@ func TestPG(t *testing.T) {
 	err := conn.Connect()
 	assert.NoError(t, err)
 
-	_, err = conn.DropTable("person", "place")
+	_, err = conn.DropTable("person", "place", "transactions")
 	assert.NoError(t, err)
 
 	conn.Db.MustExec(tablesDDL)
@@ -41,6 +55,7 @@ func TestPG(t *testing.T) {
 	tx.MustExec("INSERT INTO place (country, city, telcode) VALUES ($1, $2, $3)", "United States", "New York", "1")
 	tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Hong Kong", "852")
 	tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Singapore", "65")
+	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2019-10-10", "test product", "65.657")
 	tx.Commit()
 
 	data, err := conn.Query(`select * from person`)
@@ -50,6 +65,11 @@ func TestPG(t *testing.T) {
 	data, err = conn.Query(`select * from place`)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
+
+	data, err = conn.Query(`select * from transactions`)
+	assert.NoError(t, err)
+	assert.Len(t, data.Rows, 1)
+	assert.Equal(t, data.Records[0]["amount"], "65.657")
 
 	// GetSchemas
 	data, err = conn.GetSchemas()
@@ -80,7 +100,6 @@ func TestPG(t *testing.T) {
 	assert.Len(t, data.Rows, 3)
 	assert.Equal(t, data.Records[2]["data_type"], "integer")
 
-
 	// load Csv from seed file
 	// box := packr.NewBox("./seeds")
 	// file, err := box.Open("place.csv")
@@ -95,4 +114,3 @@ func TestPG(t *testing.T) {
 	assert.NoError(t, err)
 
 }
-
