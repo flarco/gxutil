@@ -69,7 +69,7 @@ func TestPG(t *testing.T) {
 	data, err = conn.Query(`select * from transactions`)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 1)
-	assert.Equal(t, data.Records[0]["amount"], "65.657")
+	assert.Equal(t, data.Records[0]["amount"], 65.657)
 
 	// GetSchemas
 	data, err = conn.GetSchemas()

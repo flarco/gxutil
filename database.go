@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -151,16 +152,16 @@ func (conn *Connection) Query(sql string) (Dataset, error) {
 				for j, n := range arr {
 					buf[j] = byte(n)
 				}
-				rec[i] = string(buf)
-				// PrintV(string(buf))
-				// fmt.Printf("%T - %v - %v\n", v, val, rec[i])
+				f, err := strconv.ParseFloat(string(buf), 64)
+				if err != nil {
+					rec[i] = string(buf)
+				} else {
+					rec[i] = f
+				}
 			default:
 				rec[i] = val.(string)
 				_ = fmt.Sprint(v)
-				// fmt.Printf("%T - %v - %v - %v\n", v, val, reflect.TypeOf(val), rec[i])
 			}
-
-			// PrintV(rec[i])
 		}
 
 		// add record
