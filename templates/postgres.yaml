@@ -114,16 +114,16 @@ metadata:
         table_schema,
         table_name,
         case table_type
-          when 'BASE TABLE' then 'TABLE'
-          else table_type
-        end as table_type
+          when 'VIEW' then true
+          else false
+        end as is_view
       from information_schema.tables
       where table_schema = '{schema}' and table_name = '{table}'
     )
     select
       cols.table_schema as schema_name,
       cols.table_name as table_name,
-      tables.table_type as table_type,
+      tables.is_view as is_view,
       cols.column_name as column_name,
       cols.data_type as data_type,
       cols.ordinal_position as column_id
@@ -134,6 +134,65 @@ metadata:
       and tables.table_name = cols.table_name
     order by cols.table_catalog, cols.table_schema, cols.table_name, cols.ordinal_position
 
+  get_schemata: |
+    with tables as (
+      select
+        table_catalog,
+        table_schema,
+        table_name,
+        case table_type
+          when 'VIEW' then true
+          else false
+        end as is_view
+      from information_schema.tables
+      where table_schema = '{schema}'
+    )
+    select
+      cols.table_schema as schema_name,
+      cols.table_name as table_name,
+      tables.is_view as is_view,
+      cols.column_name as column_name,
+      cols.data_type as data_type,
+      cols.ordinal_position as column_id
+    from information_schema.columns cols
+    join tables
+      on tables.table_catalog = cols.table_catalog
+      and tables.table_schema = cols.table_schema
+      and tables.table_name = cols.table_name
+    order by cols.table_catalog, cols.table_schema, cols.table_name, cols.ordinal_position
+  
+  get_ddl: "
+    SELECT                                          
+      'CREATE TABLE ' || nspname || '.' || relname || E'\n(\n' ||
+      array_to_string(
+        array_agg(
+          '    ' || column_name || ' ' ||  type || ' '|| not_null
+        )
+        , E',\n'
+      ) || E'\n)' as ddl
+    from
+    (
+      SELECT 
+        n.nspname, c.relname, a.attname AS column_name,
+        pg_catalog.format_type(a.atttypid, a.atttypmod) as type,
+        case 
+          when a.attnotnull
+        then 'NOT NULL' 
+        else 'NULL' 
+        END as not_null 
+      FROM pg_class c,
+      pg_attribute a,
+      pg_type t,
+      pg_namespace n
+      WHERE  n.nspname = '{schema}' and c.relname = '{table}'
+      AND a.attnum > 0
+      AND a.attrelid = c.oid
+      AND a.atttypid = t.oid
+      and  n.oid = c.relnamespace
+    ORDER BY a.attnum
+    ) as tabledefinition
+    group by nspname, relname
+    "
 
 analysis:
   field_chars: |

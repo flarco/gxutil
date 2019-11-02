@@ -20,6 +20,31 @@ type Connection struct {
 	Db       *sqlx.DB
 	Data     Dataset
 	Template Template
+	Schemata Schemata
+}
+
+type Column struct {
+	Position int64  `json:"position"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+}
+
+type Table struct {
+	Name       string `json:"name"`
+	IsView     bool   `json:"is_view"` // whether is a view
+	Columns    []Column
+	ColumnsMap map[string]*Column
+}
+
+type Schema struct {
+	Name   string `json:"name"`
+	Tables map[string]Table
+}
+
+// Schemata contains the full schema for a connection
+type Schemata struct {
+	Schemas map[string]Schema
+	Tables  map[string]*Table // all tables with full name lower case (schema.table)
 }
 
 // Template is a database YAML template
@@ -33,6 +58,11 @@ type Template struct {
 
 // Connect connects to a database using sqlx
 func (conn *Connection) Connect() error {
+	conn.Schemata = Schemata{
+		Schemas: map[string]Schema{},
+		Tables:  map[string]*Table{},
+	}
+
 	if conn.Type == "" {
 		if strings.HasPrefix(conn.URL, "postgresql://") {
 			conn.Type = "postgres"
@@ -143,8 +173,18 @@ func (conn *Connection) Query(sql string) (Dataset, error) {
 				rec[i] = val.(time.Time)
 			case nil:
 				rec[i] = nil
+			case int:
+				rec[i] = int64(val.(int))
+			case int8:
+				rec[i] = int64(val.(int8))
+			case int16:
+				rec[i] = int64(val.(int16))
+			case int32:
+				rec[i] = int64(val.(int32))
 			case int64:
 				rec[i] = val.(int64)
+			case bool:
+				rec[i] = val.(bool)
 			case []uint8:
 				arr := val.([]uint8)
 				buf := make([]byte, len(arr))
@@ -195,6 +235,7 @@ func splitTableFullName(tableName string) (string, string) {
 
 // GetSchemas returns schemas
 func (conn *Connection) GetSchemas() (Dataset, error) {
+	// fields: [schema_name]
 	return conn.Query(conn.Template.Metadata["get_schemas"])
 }
 
@@ -207,60 +248,60 @@ func (conn *Connection) GetObjects(schema string, objectType string) (Dataset, e
 
 // GetTables returns tables for given schema
 func (conn *Connection) GetTables(schema string) (Dataset, error) {
+	// fields: [table_name]
 	sql := R(conn.Template.Metadata["get_tables"], "schema", schema)
 	return conn.Query(sql)
 }
 
 // GetViews returns views for given schema
 func (conn *Connection) GetViews(schema string) (Dataset, error) {
+	// fields: [table_name]
 	sql := R(conn.Template.Metadata["get_views"], "schema", schema)
 	return conn.Query(sql)
 }
 
-// GetColumns returns columns for given table. `tableName` should
+// GetColumns returns columns for given table. `tableFName` should
 // include schema and table, example: `schema1.table2`
 // fields should be `column_name|data_type`
-func (conn *Connection) GetColumns(tableName string) (Dataset, error) {
-	schema, table := splitTableFullName(tableName)
-
-	sql := R(
-		conn.Template.Metadata["get_columns"],
-		"schema", schema,
-		"table", table,
-	)
+func (conn *Connection) GetColumns(tableFName string) (Dataset, error) {
+	sql := getTemplateTableFName(conn, "get_columns", tableFName)
 	return conn.Query(sql)
 }
 
 // GetColumnsFull returns columns for given table. `tableName` should
 // include schema and table, example: `schema1.table2`
 // fields should be `schema_name|table_name|table_type|column_name|data_type|column_id`
-func (conn *Connection) GetColumnsFull(tableName string) (Dataset, error) {
-	schema, table := splitTableFullName(tableName)
-
-	sql := R(
-		conn.Template.Metadata["get_columns_full"],
-		"schema", schema,
-		"table", table,
-	)
+func (conn *Connection) GetColumnsFull(tableFName string) (Dataset, error) {
+	sql := getTemplateTableFName(conn, "get_columns_full", tableFName)
 	return conn.Query(sql)
 }
 
 // GetPrimarkKeys returns primark keys for given table.
-func (conn *Connection) GetPrimarkKeys(tableName string) (Dataset, error) {
-	sql := R(conn.Template.Metadata["get_primary_keys"], "table", tableName)
+func (conn *Connection) GetPrimarkKeys(tableFName string) (Dataset, error) {
+	sql := getTemplateTableFName(conn, "get_indexes", tableFName)
 	return conn.Query(sql)
 }
 
 // GetIndexes returns indexes for given table.
-func (conn *Connection) GetIndexes(tableName string) (Dataset, error) {
-	sql := R(conn.Template.Metadata["get_indexes"], "table", tableName)
+func (conn *Connection) GetIndexes(tableFName string) (Dataset, error) {
+	sql := getTemplateTableFName(conn, "get_indexes", tableFName)
 	return conn.Query(sql)
 }
 
 // GetDDL returns DDL for given table.
-func (conn *Connection) GetDDL(tableName string) (Dataset, error) {
-	sql := R(conn.Template.Metadata["get_ddl"], "table", tableName)
+func (conn *Connection) GetDDL(tableFName string) (Dataset, error) {
+	sql := getTemplateTableFName(conn, "get_ddl", tableFName)
 	return conn.Query(sql)
+}
+
+func getTemplateTableFName(conn *Connection, template string, tableFName string) string {
+	schema, table := splitTableFullName(tableFName)
+	sql := R(
+		conn.Template.Metadata[template],
+		"schema", schema,
+		"table", table,
+	)
+	return sql
 }
 
 // DropTable drops given table.
@@ -285,4 +326,53 @@ func (conn *Connection) DropTable(tableNames ...string) (Dataset, error) {
 func (conn *Connection) Import(data Dataset, tableName string) error {
 
 	return nil
+}
+
+// GetSchemata obtain full schemata info
+func (conn *Connection) GetSchemata(schemaName string) (Schema, error) {
+
+	schema := Schema{
+		Name:   "",
+		Tables: map[string]Table{},
+	}
+
+	sql := R(conn.Template.Metadata["get_schemata"], "schema", schemaName)
+	schemaData, err := conn.Query(sql)
+	if err != nil {
+		return schema, Error(err, "Could not GetSchemata for "+schemaName)
+	}
+
+	schema.Name = schemaName
+
+	for _, rec := range schemaData.Records {
+		tableName := rec["table_name"].(string)
+
+		table := Table{
+			Name:       tableName,
+			IsView:     rec["is_view"].(bool),
+			Columns:    []Column{},
+			ColumnsMap: map[string]*Column{},
+		}
+
+		if _, ok := schema.Tables[tableName]; ok {
+			table = schema.Tables[tableName]
+		}
+
+		column := Column{
+			Position: rec["column_id"].(int64),
+			Name:     rec["column_name"].(string),
+			Type:     rec["data_type"].(string),
+		}
+
+		table.Columns = append(table.Columns, column)
+		table.ColumnsMap[column.Name] = &column
+
+		conn.Schemata.Tables[schemaName+"."+tableName] = &table
+		schema.Tables[tableName] = table
+
+	}
+
+	conn.Schemata.Schemas[schemaName] = schema
+
+	return schema, nil
 }
