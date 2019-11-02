@@ -1,19 +1,21 @@
 package gxutil
 
 import (
-	"os"
-	"io"
 	"encoding/csv"
+	"io"
+	"os"
+
 	"github.com/jmoiron/sqlx"
 )
 
-
 // Dataset is a query returned dataset
 type Dataset struct {
-	Result *sqlx.Rows
-	Fields []string
+	Result  *sqlx.Rows
+	Fields  []string
 	Records []map[string]interface{}
-	Rows [][]interface{}
+	Rows    [][]interface{}
+	SQL     string
+	Duration float64
 }
 
 // FromCsv converts from csv file
@@ -35,7 +37,7 @@ func (data *Dataset) FromCsv(file *os.File) error {
 			break
 		}
 		Check(err, "error reading CSV line")
-		
+
 		c++
 		if c == 1 {
 			data.Fields = row

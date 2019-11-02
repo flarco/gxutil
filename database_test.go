@@ -12,7 +12,7 @@ var (
 	PostgresURL = os.Getenv("POSTGRES_URL")
 
 	tablesDDL = `CREATE TABLE if not exists public.person (
-			first_name text,
+			first_name text PRIMARY KEY,
 			last_name text,
 			email text
 	);
@@ -22,6 +22,8 @@ var (
 			city text NULL,
 			telcode integer
 	);
+
+	CREATE INDEX idx_country_city ON public.place(country, city);
 	
 	CREATE TABLE if not exists public.transactions (
 		"date" date NULL,
@@ -33,7 +35,12 @@ var (
 		account_name varchar NULL,
 		labels varchar NULL,
 		notes varchar NULL
-	)`
+	);
+
+	create or replace view public.place_vw as
+	select * from public.place
+	where telcode = 65;
+	`
 )
 
 func TestPG(t *testing.T) {
@@ -69,7 +76,7 @@ func TestPG(t *testing.T) {
 	data, err = conn.Query(`select * from transactions`)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 1)
-	assert.Equal(t, data.Records[0]["amount"], 65.657)
+	assert.Equal(t, 65.657, data.Records[0]["amount"])
 
 	// GetSchemas
 	data, err = conn.GetSchemas()
@@ -85,28 +92,46 @@ func TestPG(t *testing.T) {
 	data, err = conn.GetViews("information_schema")
 	assert.NoError(t, err)
 	assert.Greater(t, len(data.Rows), 0)
+	assert.Greater(t, data.Duration, 0.0)
 
 	// GetColumns
 	data, err = conn.GetColumns("public.person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, data.Records[0]["data_type"], "text")
+	assert.Equal(t, "text", data.Records[0]["data_type"])
+
+	// GetPrimarkKeys
+	data, err = conn.GetPrimarkKeys("public.person")
+	assert.NoError(t, err)
+	assert.Len(t, data.Rows, 1)
+	assert.Equal(t, "first_name", data.Records[0]["column_name"])
+
+	// GetIndexes
+	data, err = conn.GetIndexes("public.place")
+	assert.NoError(t, err)
+	assert.Len(t, data.Rows, 2)
+	assert.Equal(t, "city", data.Records[1]["column_name"])
 
 	// GetColumnsFull
 	data, err = conn.GetColumnsFull("public.place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, data.Records[2]["data_type"], "integer")
+	assert.Equal(t, "integer", data.Records[2]["data_type"])
 
-	// GetDDL
+	// GetDDL of table
 	data, err = conn.GetDDL("public.place")
 	assert.NoError(t, err)
-	assert.Equal(t, data.Rows[0][0], `CREATE TABLE public.place
+	assert.Equal(t, `CREATE TABLE public.place
 (
     country text NULL,
     city text NULL,
     telcode integer NULL
-)`)
+)`, data.Rows[0][0])
+
+	// GetDDL of view
+	data, err = conn.GetDDL("public.place_vw")
+	assert.NoError(t, err)
+	assert.Equal(t, " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);", data.Rows[0][0])
 
 	// load Csv from seed file
 	// box := packr.NewBox("./seeds")
@@ -121,12 +146,12 @@ func TestPG(t *testing.T) {
 	// Test Schemata
 	sData, err := conn.GetSchemata("public")
 	assert.NoError(t, err)
-	assert.Equal(t, sData.Name, "public")
+	assert.Equal(t, "public", sData.Name)
 	assert.Contains(t, sData.Tables, "person")
 	assert.Contains(t, conn.Schemata.Tables, "public.person")
 	assert.Len(t, sData.Tables["person"].Columns, 3)
-	assert.Equal(t, sData.Tables["person"].ColumnsMap["email"].Type, "text")
-	assert.Equal(t, conn.Schemata.Tables["public.person"].ColumnsMap["email"].Position, int64(3))
+	assert.Equal(t, "text", sData.Tables["person"].ColumnsMap["email"].Type)
+	assert.Equal(t, int64(3), conn.Schemata.Tables["public.person"].ColumnsMap["email"].Position)
 
 	// Drop tall tables
 	_, err = conn.DropTable("person", "place", "transactions")

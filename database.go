@@ -142,6 +142,8 @@ func (conn *Connection) LoadYAML() error {
 
 // Query runs a sql query, returns `result`, `error`
 func (conn *Connection) Query(sql string) (Dataset, error) {
+	start := time.Now()
+
 	result, err := conn.Db.Queryx(sql)
 	if err != nil {
 		return conn.Data, Error(err, "conn.Db.Queryx(sql)")
@@ -154,6 +156,8 @@ func (conn *Connection) Query(sql string) (Dataset, error) {
 
 	conn.Data.Result = result
 	conn.Data.Fields = fields
+	conn.Data.SQL = sql
+	conn.Data.Duration = time.Since(start).Seconds()
 	conn.Data.Records = []map[string]interface{}{}
 	conn.Data.Rows = [][]interface{}{}
 
@@ -278,7 +282,7 @@ func (conn *Connection) GetColumnsFull(tableFName string) (Dataset, error) {
 
 // GetPrimarkKeys returns primark keys for given table.
 func (conn *Connection) GetPrimarkKeys(tableFName string) (Dataset, error) {
-	sql := getTemplateTableFName(conn, "get_indexes", tableFName)
+	sql := getTemplateTableFName(conn, "get_primary_keys", tableFName)
 	return conn.Query(sql)
 }
 
@@ -359,7 +363,7 @@ func (conn *Connection) GetSchemata(schemaName string) (Schema, error) {
 		}
 
 		column := Column{
-			Position: rec["column_id"].(int64),
+			Position: rec["position"].(int64),
 			Name:     rec["column_name"].(string),
 			Type:     rec["data_type"].(string),
 		}

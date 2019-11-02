@@ -1,5 +1,5 @@
 core:
-  drop_table: drop table if exists {table}
+  drop_table: drop table if exists {table} cascade
   replace: insert into {table} ({names}) values ({values}) on conflict ({pk_fields}) do update set {set_fields}
   replace_temp: |
     insert into {table} ({names})
@@ -106,6 +106,45 @@ metadata:
       and table_schema = '{schema}'
       and table_name = '{table}'
     order by ordinal_position
+
+  get_primary_keys: |
+    select kcu.table_schema as schema_name,
+           kcu.table_name as table_name,
+           tco.constraint_name as pk_name,
+           kcu.ordinal_position as position,
+           kcu.column_name as column_name
+    from information_schema.table_constraints tco
+    join information_schema.key_column_usage kcu 
+         on kcu.constraint_name = tco.constraint_name
+         and kcu.constraint_schema = tco.constraint_schema
+         and kcu.constraint_name = tco.constraint_name
+    where kcu.table_schema = '{schema}'
+      and kcu.table_name = '{table}'
+    order by kcu.table_schema,
+             kcu.table_name,
+             position
+
+  get_indexes: |
+    select
+      t.relname as table_name,
+      i.relname as index_name,
+      a.attname as column_name
+    from
+      pg_class t,
+      pg_class i,
+      pg_index ix,
+      pg_attribute a,
+      pg_namespace n
+    where
+      t.oid = ix.indrelid
+      and i.oid = ix.indexrelid
+      and n.oid = i.relnamespace
+      and a.attrelid = t.oid
+      and a.attnum = ANY(ix.indkey)
+      and n.nspname = '{schema}' and t.relname = '{table}'
+    order by
+      t.relname,
+      i.relname     
   
   get_columns_full: |
     with tables as (
@@ -126,7 +165,7 @@ metadata:
       tables.is_view as is_view,
       cols.column_name as column_name,
       cols.data_type as data_type,
-      cols.ordinal_position as column_id
+      cols.ordinal_position as position
     from information_schema.columns cols
     join tables
       on tables.table_catalog = cols.table_catalog
@@ -153,7 +192,7 @@ metadata:
       tables.is_view as is_view,
       cols.column_name as column_name,
       cols.data_type as data_type,
-      cols.ordinal_position as column_id
+      cols.ordinal_position as position
     from information_schema.columns cols
     join tables
       on tables.table_catalog = cols.table_catalog
@@ -162,16 +201,7 @@ metadata:
     order by cols.table_catalog, cols.table_schema, cols.table_name, cols.ordinal_position
   
   get_ddl: "
-    SELECT                                          
-      'CREATE TABLE ' || nspname || '.' || relname || E'\n(\n' ||
-      array_to_string(
-        array_agg(
-          '    ' || column_name || ' ' ||  type || ' '|| not_null
-        )
-        , E',\n'
-      ) || E'\n)' as ddl
-    from
-    (
+    with tabledefinition as (
       SELECT 
         n.nspname, c.relname, a.attname AS column_name,
         pg_catalog.format_type(a.atttypid, a.atttypmod) as type,
@@ -190,8 +220,29 @@ metadata:
       AND a.atttypid = t.oid
       and  n.oid = c.relnamespace
     ORDER BY a.attnum
-    ) as tabledefinition
-    group by nspname, relname
+    )
+    , table_ddl as (
+        SELECT                                          
+          'CREATE TABLE ' || nspname || '.' || relname || E'\n(\n' ||
+          array_to_string(
+            array_agg(
+              '    ' || column_name || ' ' ||  type || ' '|| not_null
+            )
+            , E',\n'
+          ) || E'\n)' as ddl
+        from tabledefinition
+        group by nspname, relname
+    )
+    , view_ddl as (
+      SELECT pg_get_viewdef(
+    to_regclass('{schema}.{table}'))::text as ddl
+    )
+    select
+      case when view_ddl.ddl is null or view_ddl.ddl = 'Not a view'
+      then table_ddl.ddl
+      else view_ddl.ddl
+      end as ddl
+    from view_ddl, table_ddl
     "
 
 analysis:
