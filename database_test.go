@@ -153,7 +153,39 @@ func TestPG(t *testing.T) {
 	assert.Equal(t, "text", sData.Tables["person"].ColumnsMap["email"].Type)
 	assert.Equal(t, int64(3), conn.Schemata.Tables["public.person"].ColumnsMap["email"].Position)
 
-	// Drop tall tables
+	// RunAnalysis field_stat
+	values := map[string]interface{}{
+		"t1": "public.place",
+		"t2":"public.place",
+		"t1_field":"t1.country",
+		"t1_fields1":"country",
+		"t1_filter":"1=1",
+		"t2_field":"t2.country",
+		"t2_fields1":"country",
+		"t2_filter":"1=1",
+		"conds":`lower(t1.country) = lower(t2.country)`,
+	}
+	data, err = conn.RunAnalysis("table_join_match", values)
+	assert.NoError(t, err)
+	assert.Len(t, data.Rows, 2)
+	assert.Equal(t, 0.0, data.Records[0]["t1_null_cnt"])
+	assert.Equal(t, 100.0, data.Records[1]["match_rate"])
+
+	// RunAnalysisTable field_stat
+	data, err = conn.RunAnalysisTable("table_count", "public.person", "public.place")
+	assert.NoError(t, err)
+	assert.Len(t, data.Rows, 2)
+	assert.Equal(t, int64(2), data.Records[0]["cnt"])
+	assert.Equal(t, int64(3), data.Records[1]["cnt"])
+
+	// RunAnalysisField field_stat
+	data, err = conn.RunAnalysisField("field_stat", "public.person")
+	assert.NoError(t, err)
+	assert.Len(t, data.Rows, 3)
+	assert.Equal(t, int64(2), data.Records[0]["tot_cnt"])
+	assert.Equal(t, int64(0), data.Records[1]["f_dup_cnt"])
+
+	// Drop all tables
 	_, err = conn.DropTable("person", "place", "transactions")
 	assert.NoError(t, err)
 }

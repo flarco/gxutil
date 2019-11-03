@@ -47,6 +47,14 @@ func F(format string, args ...interface{}) string {
 	return fmt.Sprintf(format, args...)
 }
 
+// mapMerge copies key values from `mS` into `mT`
+func mapMerge(mT map[string]interface{}, mS map[string]interface{}) map[string]interface{} {
+	for key, val := range mS {
+		mT[key] = val
+	}
+	return mT
+}
+
 // R : Replacer
 // R("File {file} had error {error}", "file", file, "error", err)
 func R(format string, args ...string) string {
@@ -60,6 +68,17 @@ func R(format string, args ...string) string {
 	}
 	r := strings.NewReplacer(args2...)
 	return r.Replace(format)
+}
+
+// Rm is like R, for replacing with a map
+func Rm(format string, m map[string]interface{}) string {
+	args, i := make([]string, len(m)*2), 0
+	for k, v := range m {
+			args[i] = "{" + k + "}"
+			args[i+1] = fmt.Sprint(v)
+			i += 2
+	}
+	return strings.NewReplacer(args...).Replace(format)
 }
 
 // PrintV prints the value of object

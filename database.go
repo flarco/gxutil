@@ -1,6 +1,7 @@
 package gxutil
 
 import (
+	"errors"
 	"fmt"
 	"path"
 	"runtime"
@@ -94,6 +95,14 @@ func (conn *Connection) Close() error {
 
 // LoadYAML loads the approriate yaml template
 func (conn *Connection) LoadYAML() error {
+	conn.Template = Template{
+		Core:           map[string]string{},
+		Metadata:       map[string]string{},
+		Analysis:       map[string]string{},
+		Function:       map[string]string{},
+		GeneralTypeMap: map[string]string{},
+	}
+
 	_, filename, _, _ := runtime.Caller(1)
 	box := packr.NewBox(path.Join(path.Dir(filename), "templates"))
 
@@ -117,24 +126,24 @@ func (conn *Connection) LoadYAML() error {
 		return Error(err, "yaml.Unmarshal")
 	}
 
-	if len(template.Core) > 0 {
-		conn.Template.Core = template.Core
+	for key, val := range template.Core {
+		conn.Template.Core[key] = val
 	}
 
-	if len(template.Analysis) > 0 {
-		conn.Template.Analysis = template.Analysis
+	for key, val := range template.Analysis {
+		conn.Template.Analysis[key] = val
 	}
 
-	if len(template.Function) > 0 {
-		conn.Template.Function = template.Function
+	for key, val := range template.Function {
+		conn.Template.Function[key] = val
 	}
 
-	if len(template.Metadata) > 0 {
-		conn.Template.Metadata = template.Metadata
+	for key, val := range template.Metadata {
+		conn.Template.Metadata[key] = val
 	}
 
-	if len(template.GeneralTypeMap) > 0 {
-		conn.Template.GeneralTypeMap = template.GeneralTypeMap
+	for key, val := range template.GeneralTypeMap {
+		conn.Template.GeneralTypeMap[key] = val
 	}
 
 	return nil
@@ -146,7 +155,7 @@ func (conn *Connection) Query(sql string) (Dataset, error) {
 
 	result, err := conn.Db.Queryx(sql)
 	if err != nil {
-		return conn.Data, Error(err, "conn.Db.Queryx(sql)")
+		return conn.Data, Error(err, "SQL Error for:\n"+sql)
 	}
 
 	fields, err := result.Columns()
@@ -379,4 +388,68 @@ func (conn *Connection) GetSchemata(schemaName string) (Schema, error) {
 	conn.Schemata.Schemas[schemaName] = schema
 
 	return schema, nil
+}
+
+// RunAnalysis runs an analysis
+func (conn *Connection) RunAnalysis(analysisName string, values map[string]interface{}) (Dataset, error) {
+	sql := Rm(
+		conn.Template.Analysis[analysisName],
+		values,
+	)
+	return conn.Query(sql)
+}
+
+// RunAnalysisTable runs a table level analysis
+func (conn *Connection) RunAnalysisTable(analysisName string, tableFNames ...string) (Dataset, error) {
+
+	if len(tableFNames) == 0 {
+		return Dataset{}, errors.New("Need to provied tables for RunAnalysisTable")
+	}
+
+	sqls := []string{}
+
+	for _, tableFName := range tableFNames {
+		schema, table := splitTableFullName(tableFName)
+		sql := R(
+			conn.Template.Analysis[analysisName],
+			"schema", schema,
+			"table", table,
+		)
+		sqls = append(sqls, sql)
+	}
+
+	sql := strings.Join(sqls, "\nUNION ALL\n")
+	return conn.Query(sql)
+}
+
+// RunAnalysisField runs a field level analysis
+func (conn *Connection) RunAnalysisField(analysisName string, tableFName string, fields ...string) (Dataset, error) {
+	schema, table := splitTableFullName(tableFName)
+
+	sqls := []string{}
+
+	if len(fields) == 0 {
+		// get fields
+		result, err := conn.GetColumns(tableFName)
+		if err != nil {
+			return Dataset{}, err
+		}
+
+		for _, rec := range result.Records {
+			fields = append(fields, rec["column_name"].(string))
+		}
+	}
+
+	for _, field := range fields {
+		sql := R(
+			conn.Template.Analysis[analysisName],
+			"schema", schema,
+			"table", table,
+			"field", field,
+		)
+		sqls = append(sqls, sql)
+	}
+
+	sql := strings.Join(sqls, "\nUNION ALL\n")
+	return conn.Query(sql)
 }
