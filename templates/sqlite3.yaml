@@ -17,6 +17,7 @@ metadata:
 
   get_schemas: |
     select 'main' as schema_name
+  
   get_tables: |
     select name as table_name
     from sqlite_master
@@ -55,21 +56,29 @@ metadata:
     select
       '{schema}' as schema_name,
       '{table}' as table_name,
-      false as is_view,
       pti.name as column_name,
       pti.type as data_type,
       pti.cid + 1 as position
     from pragma_table_info('{table}') pti
+    order by pti.cid
   
   get_schemata: |
     select
       '{schema}' as schema_name,
       sm.name as table_name,
-      false as is_view,
+      case
+        when sm2.type = 'view'
+          then true
+        else false
+      end as is_view,
       pti.name as column_name,
       pti.type as data_type,
       pti.cid + 1 as position
     from sqlite_master AS sm, pragma_table_info(sm.name) pti
+    left join sqlite_master as sm2
+      on sm2.name = sm.name
+      and sm2.type = 'view'
+    order by sm.name, pti.cid
   
   get_ddl: |
     select sql from sqlite_master

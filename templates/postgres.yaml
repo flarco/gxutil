@@ -159,7 +159,6 @@ metadata:
     select
       cols.table_schema as schema_name,
       cols.table_name as table_name,
-      tables.is_view as is_view,
       cols.column_name as column_name,
       cols.data_type as data_type,
       cols.ordinal_position as position

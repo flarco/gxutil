@@ -149,9 +149,11 @@ func TestPG(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "public", sData.Name)
 	assert.Contains(t, sData.Tables, "person")
+	assert.Contains(t, sData.Tables, "place_vw")
 	assert.Contains(t, conn.Schemata.Tables, "public.person")
 	assert.Len(t, sData.Tables["person"].Columns, 3)
 	assert.Equal(t, "text", sData.Tables["person"].ColumnsMap["email"].Type)
+	assert.Equal(t, true, sData.Tables["place_vw"].IsView)
 	assert.Equal(t, int64(3), conn.Schemata.Tables["public.person"].ColumnsMap["email"].Position)
 
 	// RunAnalysis field_stat
@@ -286,7 +288,7 @@ func TestSQLite(t *testing.T) {
 	assert.Equal(t, "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )", data.Rows[0][0])
 
 	// GetDDL of view
-	data, err = conn.GetDDL("public.place_vw")
+	data, err = conn.GetDDL("main.place_vw")
 	assert.NoError(t, err)
 	assert.Equal(t, "CREATE VIEW place_vw as\n\tselect * from place\n\twhere telcode = 65", data.Rows[0][0])
 
@@ -305,9 +307,11 @@ func TestSQLite(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "main", sData.Name)
 	assert.Contains(t, sData.Tables, "person")
+	assert.Contains(t, sData.Tables, "place_vw")
 	assert.Contains(t, conn.Schemata.Tables, "main.person")
 	assert.Len(t, sData.Tables["person"].Columns, 3)
 	assert.Equal(t, "varchar(255)", sData.Tables["person"].ColumnsMap["email"].Type)
+	assert.Equal(t, true, sData.Tables["place_vw"].IsView)
 	assert.Equal(t, int64(3), conn.Schemata.Tables["main.person"].ColumnsMap["email"].Position)
 
 	// RunAnalysis field_stat
