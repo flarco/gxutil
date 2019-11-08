@@ -7,24 +7,24 @@ core:
 
 metadata:
 
-  get_schemas: |
+  schemas: |
     select 'main' as schema_name
   
-  get_tables: |
+  tables: |
     select name as table_name
     from sqlite_master
     where type='table'
 
-  get_views: |
+  views: |
     select name as table_name
     from sqlite_master
     where type='view'
 
-  get_columns: |
+  columns: |
     select name as column_name, type as data_type
     from pragma_table_info('{table}')
 
-  get_primary_keys: |
+  primary_keys: |
     select 
       null as pk_name,
       pk as position,
@@ -32,7 +32,7 @@ metadata:
     from pragma_table_info('{table}')
     where pk > 0 
   
-  get_indexes: |
+  indexes: |
     SELECT DISTINCT
       sm.name as table_name,
       ii.name as column_name,
@@ -44,7 +44,7 @@ metadata:
       and sm.name='{table}'
     ORDER BY 1;
 
-  get_columns_full: |
+  columns_full: |
     select
       '{schema}' as schema_name,
       '{table}' as table_name,
@@ -54,7 +54,7 @@ metadata:
     from pragma_table_info('{table}') pti
     order by pti.cid
   
-  get_schemata: |
+  schemata: |
     select
       '{schema}' as schema_name,
       sm.name as table_name,
@@ -72,7 +72,7 @@ metadata:
       and sm2.type = 'view'
     order by sm.name, pti.cid
   
-  get_ddl: |
+  ddl: |
     select sql from sqlite_master
     where name = '{table}' and type in ('table', 'view')
 

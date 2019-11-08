@@ -265,27 +265,27 @@ func splitTableFullName(tableName string) (string, string) {
 // GetSchemas returns schemas
 func (conn *Connection) GetSchemas() (Dataset, error) {
 	// fields: [schema_name]
-	return conn.Query(conn.Template.Metadata["get_schemas"])
+	return conn.Query(conn.Template.Metadata["schemas"])
 }
 
 // GetObjects returns objects (tables or views) for given schema
 // `objectType` can be either 'table', 'view' or 'all'
 func (conn *Connection) GetObjects(schema string, objectType string) (Dataset, error) {
-	sql := R(conn.Template.Metadata["get_objects"], "schema", schema, "object_type", objectType)
+	sql := R(conn.Template.Metadata["objects"], "schema", schema, "object_type", objectType)
 	return conn.Query(sql)
 }
 
 // GetTables returns tables for given schema
 func (conn *Connection) GetTables(schema string) (Dataset, error) {
 	// fields: [table_name]
-	sql := R(conn.Template.Metadata["get_tables"], "schema", schema)
+	sql := R(conn.Template.Metadata["tables"], "schema", schema)
 	return conn.Query(sql)
 }
 
 // GetViews returns views for given schema
 func (conn *Connection) GetViews(schema string) (Dataset, error) {
 	// fields: [table_name]
-	sql := R(conn.Template.Metadata["get_views"], "schema", schema)
+	sql := R(conn.Template.Metadata["views"], "schema", schema)
 	return conn.Query(sql)
 }
 
@@ -293,7 +293,7 @@ func (conn *Connection) GetViews(schema string) (Dataset, error) {
 // include schema and table, example: `schema1.table2`
 // fields should be `column_name|data_type`
 func (conn *Connection) GetColumns(tableFName string) (Dataset, error) {
-	sql := getTemplateTableFName(conn, "get_columns", tableFName)
+	sql := getMetadataTableFName(conn, "columns", tableFName)
 	return conn.Query(sql)
 }
 
@@ -301,29 +301,29 @@ func (conn *Connection) GetColumns(tableFName string) (Dataset, error) {
 // include schema and table, example: `schema1.table2`
 // fields should be `schema_name|table_name|table_type|column_name|data_type|column_id`
 func (conn *Connection) GetColumnsFull(tableFName string) (Dataset, error) {
-	sql := getTemplateTableFName(conn, "get_columns_full", tableFName)
+	sql := getMetadataTableFName(conn, "columns_full", tableFName)
 	return conn.Query(sql)
 }
 
 // GetPrimarkKeys returns primark keys for given table.
 func (conn *Connection) GetPrimarkKeys(tableFName string) (Dataset, error) {
-	sql := getTemplateTableFName(conn, "get_primary_keys", tableFName)
+	sql := getMetadataTableFName(conn, "primary_keys", tableFName)
 	return conn.Query(sql)
 }
 
 // GetIndexes returns indexes for given table.
 func (conn *Connection) GetIndexes(tableFName string) (Dataset, error) {
-	sql := getTemplateTableFName(conn, "get_indexes", tableFName)
+	sql := getMetadataTableFName(conn, "indexes", tableFName)
 	return conn.Query(sql)
 }
 
 // GetDDL returns DDL for given table.
 func (conn *Connection) GetDDL(tableFName string) (Dataset, error) {
-	sql := getTemplateTableFName(conn, "get_ddl", tableFName)
+	sql := getMetadataTableFName(conn, "ddl", tableFName)
 	return conn.Query(sql)
 }
 
-func getTemplateTableFName(conn *Connection, template string, tableFName string) string {
+func getMetadataTableFName(conn *Connection, template string, tableFName string) string {
 	schema, table := splitTableFullName(tableFName)
 	sql := R(
 		conn.Template.Metadata[template],
@@ -365,7 +365,7 @@ func (conn *Connection) GetSchemata(schemaName string) (Schema, error) {
 		Tables: map[string]Table{},
 	}
 
-	sql := R(conn.Template.Metadata["get_schemata"], "schema", schemaName)
+	sql := R(conn.Template.Metadata["schemata"], "schema", schemaName)
 	schemaData, err := conn.Query(sql)
 	if err != nil {
 		return schema, Error(err, "Could not GetSchemata for "+schemaName)
