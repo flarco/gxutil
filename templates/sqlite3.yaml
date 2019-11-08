@@ -6,14 +6,6 @@ core:
 
 
 metadata:
-  all_tables: |
-  all_columns: |
-    SELECT DISTINCT m.name || '.' || ii.name AS 'indexed-columns'
-    FROM sqlite_master AS m,
-        pragma_index_list(m.name) AS il,
-        pragma_index_info(il.name) AS ii
-    WHERE m.type='table'
-    ORDER BY 1;
 
   get_schemas: |
     select 'main' as schema_name

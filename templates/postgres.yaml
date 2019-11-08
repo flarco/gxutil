@@ -18,64 +18,6 @@ core:
   limit: SELECT {fields} FROM {table} where limit {n}
 
 metadata:
-  all_tables: |
-    with tables as (
-      select
-        table_catalog,
-        table_schema,
-        table_name,
-        case table_type
-          when 'BASE TABLE' then 'TABLE'
-          else table_type
-        end as table_type
-      from information_schema.tables
-    )
-    select
-      cols.table_schema as schema_name,
-      cols.table_name as table_name,
-      tables.table_type as table_type,
-      count(cols.column_name) as num_columns,
-      null::int num_rows,
-      null::date last_analyzed
-    from information_schema.columns cols
-    join tables
-      on tables.table_catalog = cols.table_catalog
-      and tables.table_schema = cols.table_schema
-      and tables.table_name = cols.table_name
-      group by cols.table_catalog, cols.table_schema, tables.table_type, cols.table_name
-      order by cols.table_catalog, cols.table_schema, cols.table_name
-
-  all_columns: |
-    with tables as (
-      select
-        table_catalog,
-        table_schema,
-        table_name,
-        case table_type
-          when 'BASE TABLE' then 'TABLE'
-          else table_type
-        end as table_type
-      from information_schema.tables
-    )
-    select
-      cols.table_schema as schema_name,
-      cols.table_name as table_name,
-      tables.table_type as table_type,
-      cols.column_name as column_name,
-      cols.data_type as column_type,
-      cols.ordinal_position as column_id,
-      null::int num_distinct,
-      null::int num_nulls,
-      null::int num_rows,
-      null::int prct_distinct,
-      null::int prct_nulls,
-      null::date last_analyzed
-    from information_schema.columns cols
-    join tables
-      on tables.table_catalog = cols.table_catalog
-      and tables.table_schema = cols.table_schema
-      and tables.table_name = cols.table_name
-      order by cols.table_catalog, cols.table_schema, cols.table_name, cols.ordinal_position
     
   get_schemas: |
     select schema_name
