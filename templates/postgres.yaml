@@ -108,9 +108,7 @@ metadata:
     order by ordinal_position
 
   get_primary_keys: |
-    select kcu.table_schema as schema_name,
-           kcu.table_name as table_name,
-           tco.constraint_name as pk_name,
+    select tco.constraint_name as pk_name,
            kcu.ordinal_position as position,
            kcu.column_name as column_name
     from information_schema.table_constraints tco
@@ -126,7 +124,6 @@ metadata:
 
   get_indexes: |
     select
-      t.relname as table_name,
       i.relname as index_name,
       a.attname as column_name
     from

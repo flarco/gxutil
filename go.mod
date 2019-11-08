@@ -24,6 +24,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.11.3 // indirect
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
+	github.com/jinzhu/gorm v1.9.11
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/jstemmer/go-junit-report v0.9.1 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
@@ -32,6 +33,7 @@ require (
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.10 // indirect
+	github.com/mattn/go-sqlite3 v1.11.0
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect

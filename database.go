@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gobuffalo/packr"
+	"github.com/jinzhu/gorm"
 	"github.com/jmoiron/sqlx"
 	"gopkg.in/yaml.v2"
 )
@@ -19,6 +20,7 @@ type Connection struct {
 	URL      string
 	Type     string // the type of database for sqlx: postgres, mysql, sqlite
 	Db       *sqlx.DB
+	db       gorm.DB
 	Data     Dataset
 	Template Template
 	Schemata Schemata
@@ -93,6 +95,11 @@ func (conn *Connection) Close() error {
 	return conn.Db.Close()
 }
 
+// GetGormConn returns the gorm db connection
+func (conn *Connection) GetGormConn() (*gorm.DB, error) {
+	return gorm.Open(conn.Type, conn.URL)
+}
+
 // LoadYAML loads the approriate yaml template
 func (conn *Connection) LoadYAML() error {
 	conn.Template = Template{
@@ -153,6 +160,10 @@ func (conn *Connection) LoadYAML() error {
 func (conn *Connection) Query(sql string) (Dataset, error) {
 	start := time.Now()
 
+	if sql == "" {
+		return Dataset{}, errors.New("Empty Query")
+	}
+
 	result, err := conn.Db.Queryx(sql)
 	if err != nil {
 		return conn.Data, Error(err, "SQL Error for:\n"+sql)
@@ -196,6 +207,10 @@ func (conn *Connection) Query(sql string) (Dataset, error) {
 				rec[i] = int64(val.(int32))
 			case int64:
 				rec[i] = val.(int64)
+			case float32:
+				rec[i] = val.(float32)
+			case float64:
+				rec[i] = val.(float64)
 			case bool:
 				rec[i] = val.(bool)
 			case []uint8:
@@ -241,6 +256,7 @@ func splitTableFullName(tableName string) (string, string) {
 		schema = a[0]
 		table = a[1]
 	} else if len(a) == 1 {
+		schema = ""
 		table = a[0]
 	}
 	return strings.ToLower(schema), strings.ToLower(table)
@@ -359,6 +375,18 @@ func (conn *Connection) GetSchemata(schemaName string) (Schema, error) {
 
 	for _, rec := range schemaData.Records {
 		tableName := rec["table_name"].(string)
+
+		switch v := rec["is_view"].(type) {
+		case int64:
+			if rec["is_view"].(int64) == 0 {
+				rec["is_view"] = false
+			} else {
+				rec["is_view"] = true
+			}
+		default:
+			_ = fmt.Sprint(v)
+			_ = rec["is_view"]
+		}
 
 		table := Table{
 			Name:       tableName,
