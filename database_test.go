@@ -246,7 +246,7 @@ func TestSQLite(t *testing.T) {
 	assert.Greater(t, len(data.Rows), 0)
 
 	// GetTables
-	data, err = conn.GetTables("public")
+	data, err = conn.GetTables("main")
 	assert.NoError(t, err)
 	assert.Greater(t, len(data.Rows), 0)
 
@@ -263,25 +263,25 @@ func TestSQLite(t *testing.T) {
 	assert.Equal(t, "varchar(255)", data.Records[0]["data_type"])
 
 	// GetPrimarkKeys
-	data, err = conn.GetPrimarkKeys("public.person")
+	data, err = conn.GetPrimarkKeys("main.person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 1)
 	assert.Equal(t, "first_name", data.Records[0]["column_name"])
 
 	// GetIndexes
-	data, err = conn.GetIndexes("public.place")
+	data, err = conn.GetIndexes("main.place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
 	assert.Equal(t, "city", data.Records[1]["column_name"])
 
 	// GetColumnsFull
-	data, err = conn.GetColumnsFull("public.place")
+	data, err = conn.GetColumnsFull("main.place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
 	assert.Equal(t, "bigint", data.Records[2]["data_type"])
 
 	// GetDDL of table
-	data, err = conn.GetDDL("public.place")
+	data, err = conn.GetDDL("main.place")
 	assert.NoError(t, err)
 	assert.Equal(t, "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )", data.Rows[0][0])
 
@@ -301,14 +301,14 @@ func TestSQLite(t *testing.T) {
 	// select back to assert equality
 
 	// Test Schemata
-	sData, err := conn.GetSchemata("public")
+	sData, err := conn.GetSchemata("main")
 	assert.NoError(t, err)
-	assert.Equal(t, "public", sData.Name)
+	assert.Equal(t, "main", sData.Name)
 	assert.Contains(t, sData.Tables, "person")
-	assert.Contains(t, conn.Schemata.Tables, "public.person")
+	assert.Contains(t, conn.Schemata.Tables, "main.person")
 	assert.Len(t, sData.Tables["person"].Columns, 3)
 	assert.Equal(t, "varchar(255)", sData.Tables["person"].ColumnsMap["email"].Type)
-	assert.Equal(t, int64(3), conn.Schemata.Tables["public.person"].ColumnsMap["email"].Position)
+	assert.Equal(t, int64(3), conn.Schemata.Tables["main.person"].ColumnsMap["email"].Position)
 
 	// RunAnalysis field_stat
 	values := map[string]interface{}{
