@@ -156,6 +156,155 @@ func (conn *Connection) LoadYAML() error {
 	return nil
 }
 
+func processRec(rec map[string]interface{}) map[string]interface{} {
+
+	// Ensure usable types
+	for i, val := range rec {
+
+		switch v := val.(type) {
+		case time.Time:
+			rec[i] = val.(time.Time)
+		case nil:
+			rec[i] = nil
+		case int:
+			rec[i] = int64(val.(int))
+		case int8:
+			rec[i] = int64(val.(int8))
+		case int16:
+			rec[i] = int64(val.(int16))
+		case int32:
+			rec[i] = int64(val.(int32))
+		case int64:
+			rec[i] = val.(int64)
+		case float32:
+			rec[i] = val.(float32)
+		case float64:
+			rec[i] = val.(float64)
+		case bool:
+			rec[i] = val.(bool)
+		case []uint8:
+			arr := val.([]uint8)
+			buf := make([]byte, len(arr))
+			for j, n := range arr {
+				buf[j] = byte(n)
+			}
+			f, err := strconv.ParseFloat(string(buf), 64)
+			if err != nil {
+				rec[i] = string(buf)
+			} else {
+				rec[i] = f
+			}
+		default:
+			rec[i] = val.(string)
+			_ = fmt.Sprint(v)
+		}
+	}
+
+	return rec
+}
+
+// StreamRecords the records of a sql query, returns `result`, `error`
+func (conn *Connection) StreamRecords(sql string) (<-chan map[string]interface{}, error) {
+
+	start := time.Now()
+
+	if sql == "" {
+		return nil, errors.New("Empty Query")
+	}
+
+	result, err := conn.Db.Queryx(sql)
+	if err != nil {
+		return nil, Error(err, "SQL Error for:\n"+sql)
+	}
+
+	fields, err := result.Columns()
+	if err != nil {
+		return nil, Error(err, "result.Columns()")
+	}
+
+	conn.Data.Result = result
+	conn.Data.Fields = fields
+	conn.Data.SQL = sql
+	conn.Data.Duration = time.Since(start).Seconds()
+	conn.Data.Records = []map[string]interface{}{}
+	conn.Data.Rows = [][]interface{}{}
+
+	chnl := make(chan map[string]interface{})
+	go func() {
+		for result.Next() {
+			// get records
+			rec := map[string]interface{}{}
+			err := result.MapScan(rec)
+			if err != nil {
+				// return nil, Error(err, "MapScan(rec)")
+				close(chnl)
+			}
+
+			rec = processRec(rec)
+			chnl <- rec
+
+		}
+		// Ensure that at the end of the loop we close the channel!
+		close(chnl)
+	}()
+
+	return chnl, nil
+}
+
+// StreamRows the rows of a sql query, returns `result`, `error`
+func (conn *Connection) StreamRows(sql string) (<-chan []interface{}, error) {
+	start := time.Now()
+
+	if sql == "" {
+		return nil, errors.New("Empty Query")
+	}
+
+	result, err := conn.Db.Queryx(sql)
+	if err != nil {
+		return nil, Error(err, "SQL Error for:\n"+sql)
+	}
+
+	fields, err := result.Columns()
+	if err != nil {
+		return nil, Error(err, "result.Columns()")
+	}
+
+	conn.Data.Result = result
+	conn.Data.Fields = fields
+	conn.Data.SQL = sql
+	conn.Data.Duration = time.Since(start).Seconds()
+	conn.Data.Records = []map[string]interface{}{}
+	conn.Data.Rows = [][]interface{}{}
+
+	chnl := make(chan []interface{})
+	go func() {
+		for result.Next() {
+			// get records
+			rec := map[string]interface{}{}
+			err := result.MapScan(rec)
+			if err != nil {
+				// return nil, Error(err, "MapScan(rec)")
+				close(chnl)
+			}
+
+			rec = processRec(rec)
+
+			// add row
+			row := []interface{}{}
+			for _, field := range fields {
+				row = append(row, rec[field])
+			}
+			chnl <- row
+
+		}
+		// Ensure that at the end of the loop we close the channel!
+		close(chnl)
+	}()
+
+	return chnl, nil
+
+}
+
 // Query runs a sql query, returns `result`, `error`
 func (conn *Connection) Query(sql string) (Dataset, error) {
 	start := time.Now()
@@ -189,47 +338,7 @@ func (conn *Connection) Query(sql string) (Dataset, error) {
 			return conn.Data, Error(err, "MapScan(rec)")
 		}
 
-		// Ensure usable types
-		for i, val := range rec {
-
-			switch v := val.(type) {
-			case time.Time:
-				rec[i] = val.(time.Time)
-			case nil:
-				rec[i] = nil
-			case int:
-				rec[i] = int64(val.(int))
-			case int8:
-				rec[i] = int64(val.(int8))
-			case int16:
-				rec[i] = int64(val.(int16))
-			case int32:
-				rec[i] = int64(val.(int32))
-			case int64:
-				rec[i] = val.(int64)
-			case float32:
-				rec[i] = val.(float32)
-			case float64:
-				rec[i] = val.(float64)
-			case bool:
-				rec[i] = val.(bool)
-			case []uint8:
-				arr := val.([]uint8)
-				buf := make([]byte, len(arr))
-				for j, n := range arr {
-					buf[j] = byte(n)
-				}
-				f, err := strconv.ParseFloat(string(buf), 64)
-				if err != nil {
-					rec[i] = string(buf)
-				} else {
-					rec[i] = f
-				}
-			default:
-				rec[i] = val.(string)
-				_ = fmt.Sprint(v)
-			}
-		}
+		rec = processRec(rec)
 
 		// add record
 		conn.Data.Records = append(conn.Data.Records, rec)

@@ -71,6 +71,25 @@ func TestPG(t *testing.T) {
 	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2019-10-10", "test product", "65.657")
 	tx.Commit()
 
+	// Test Streaming
+	streamRec, err := conn.StreamRecords(`select * from person`)
+	assert.NoError(t, err)
+
+	recs := []map[string]interface{}{}
+	for rec := range streamRec {
+		recs = append(recs, rec)
+	}
+	assert.Len(t, recs, 2)
+
+	streamRow, err := conn.StreamRows(`select * from person`)
+	assert.NoError(t, err)
+
+	rows := [][]interface{}{}
+	for row := range streamRow {
+		rows = append(rows, row)
+	}
+	assert.Len(t, rows, 2)
+
 	data, err := conn.Query(`select * from person`)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
@@ -187,6 +206,7 @@ func TestPG(t *testing.T) {
 	assert.Len(t, data.Rows, 3)
 	assert.Equal(t, int64(2), data.Records[0]["tot_cnt"])
 	assert.Equal(t, int64(0), data.Records[1]["f_dup_cnt"])
+
 
 	// Drop all tables
 	_, err = conn.DropTable("person", "place", "transactions")
