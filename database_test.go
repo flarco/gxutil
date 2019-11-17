@@ -208,6 +208,7 @@ func TestPG(t *testing.T) {
 	assert.Equal(t, int64(2), data.Records[0]["tot_cnt"])
 	assert.Equal(t, int64(0), data.Records[1]["f_dup_cnt"])
 
+	PGtoPGTest(t, "public.transactions")
 
 	// Drop all tables
 	_, err = conn.DropTable("person", "place", "transactions")
@@ -381,7 +382,9 @@ func TestSQLite(t *testing.T) {
 
 
 
-func TestPGtoPG(t *testing.T) {
+func PGtoPGTest(t *testing.T, srcTable string) {
+	tgtTable := srcTable + "2"
+
 	srcConn := Connection{
 		URL: PostgresURL,
 	}
@@ -395,8 +398,6 @@ func TestPGtoPG(t *testing.T) {
 	err = tgtConn.Connect()
 	assert.NoError(t, err)
 
-	srcTable := "bank.mint_transactions"
-	tgtTable := "public.mint_transactions"
 
 	data, err := srcConn.GetDDL(srcTable)
 	assert.NoError(t, err)
