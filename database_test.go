@@ -46,7 +46,7 @@ func TestPG(t *testing.T) {
 	select * from place
 	where telcode = 65
 	`
-	conn := Connection{
+	conn := PostgresConn{
 		URL: PostgresURL,
 	}
 	err := conn.Connect()
@@ -154,15 +154,31 @@ func TestPG(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);", data.Rows[0][0])
 
-	// load Csv from seed file
-	// box := packr.NewBox("./seeds")
-	// file, err := box.Open("place.csv")
-	// assert.NoError(t, err)
-	// data.FromCsv(file)
+	// load Csv from test file
+	csv1 := CSV{
+		Path: "templates/test1.csv",
+	}
+	sample, err := csv1.Sample(1000)
+	assert.NoError(t, err)
+
+	csvTable := "public.test1"
+	ddl, err := conn.GenerateDDL(csvTable, sample)
+	assert.NoError(t, err)
+
+	_, err = conn.Db.Exec(ddl)
+	assert.NoError(t, err)
+
+	stream, err := csv1.ReadStream()
+	assert.NoError(t, err)
 
 	// import to database
+	err = conn.InsertStream(csvTable, csv1.Fields, stream)
+	assert.NoError(t, err)
 
 	// select back to assert equality
+	count, err := conn.GetCount(csvTable)
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(1000), count)
 
 	// Test Schemata
 	sData, err := conn.GetSchemata("public")
@@ -211,7 +227,7 @@ func TestPG(t *testing.T) {
 	PGtoPGTest(t, "public.transactions")
 
 	// Drop all tables
-	_, err = conn.DropTable("person", "place", "transactions")
+	_, err = conn.DropTable("person", "place", "transactions", "test1")
 	assert.NoError(t, err)
 
 	conn.Close()
@@ -376,8 +392,6 @@ func TestSQLite(t *testing.T) {
 
 	err = os.Remove(SQLiteURL)
 	assert.NoError(t, err)
-
-	conn.Close()
 }
 
 
@@ -385,10 +399,11 @@ func TestSQLite(t *testing.T) {
 func PGtoPGTest(t *testing.T, srcTable string) {
 	tgtTable := srcTable + "2"
 
-	srcConn := Connection{
+	// var srcConn, tgtConn PostgresConn
+	srcConn := PostgresConn{
 		URL: PostgresURL,
 	}
-	tgtConn := Connection{
+	tgtConn := PostgresConn{
 		URL: PostgresURL,
 	}
 
@@ -397,7 +412,6 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 
 	err = tgtConn.Connect()
 	assert.NoError(t, err)
-
 
 	data, err := srcConn.GetDDL(srcTable)
 	assert.NoError(t, err)
@@ -413,7 +427,12 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 	streamRow, err := srcConn.StreamRows(`select * from ` + srcTable)
 	assert.NoError(t, err)
 
-	err = tgtConn.InsertStream(tgtTable, srcConn.Data.Fields, streamRow)
+	if err == nil {
+		err = tgtConn.InsertStream(tgtTable, srcConn.Data.Fields, streamRow)
+		assert.NoError(t, err)
+	}
+
+	_, err = tgtConn.DropTable(tgtTable)
 	assert.NoError(t, err)
 
 	srcConn.Close()

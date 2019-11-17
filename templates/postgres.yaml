@@ -393,3 +393,4 @@ general_type_map:
   datetime: "timestamp"
   timestamp: "timestamp"
   text: "text"
+  bool: "bool"

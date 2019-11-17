@@ -1,6 +1,7 @@
 package gxutil
 
 import (
+	"github.com/spf13/cast"
 	"errors"
 	"fmt"
 	"path"
@@ -15,8 +16,19 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type connection interface {
+	Close() error
+	Connect() error
+	GetGormConn() (*gorm.DB, error)
+	LoadYAML() error
+	StreamRows(sql string) (<-chan []interface{}, error)
+	Query(sql string) (Dataset, error)
+	GenerateDDL(tableFName string, data Dataset) string
+}
+
 // Connection is a database connection
 type Connection struct {
+	connection
 	URL      string
 	Type     string // the type of database for sqlx: postgres, mysql, sqlite
 	Db       *sqlx.DB
@@ -26,19 +38,23 @@ type Connection struct {
 	Schemata Schemata
 }
 
+// Column represents a schemata column
 type Column struct {
 	Position int64  `json:"position"`
 	Name     string `json:"name"`
 	Type     string `json:"type"`
 }
 
+// Table represents a schemata table
 type Table struct {
 	Name       string `json:"name"`
+	FullName   string `json:"full_name"`
 	IsView     bool   `json:"is_view"` // whether is a view
 	Columns    []Column
 	ColumnsMap map[string]*Column
 }
 
+// Schema represents a schemata schema
 type Schema struct {
 	Name   string `json:"name"`
 	Tables map[string]Table
@@ -56,7 +72,7 @@ type Template struct {
 	Metadata       map[string]string
 	Analysis       map[string]string
 	Function       map[string]string
-	GeneralTypeMap map[string]string
+	GeneralTypeMap map[string]string `yaml:"general_type_map"`
 }
 
 // Connect connects to a database using sqlx
@@ -132,6 +148,12 @@ func (conn *Connection) LoadYAML() error {
 	if err != nil {
 		return Error(err, "yaml.Unmarshal")
 	}
+
+	// jsonMap := make(map[string]interface{})
+	// println(templateBytes)
+	// err = json.Unmarshal([]byte(templateBytes), &jsonMap)
+	// val, err := j.Search("general_type_map", jsonMap)
+	// PrintV(val)
 
 	for key, val := range template.Core {
 		conn.Template.Core[key] = val
@@ -369,6 +391,16 @@ func splitTableFullName(tableName string) (string, string) {
 		table = a[0]
 	}
 	return strings.ToLower(schema), strings.ToLower(table)
+}
+
+// GetCount returns count of records
+func (conn *Connection) GetCount(tableFName string) (uint64, error) {
+	sql := F(`select count(*) cnt from %s`, tableFName)
+	data, err := conn.Query(sql)
+	if err != nil {
+		return 0, err
+	}
+	return cast.ToUint64(data.Rows[0][0]), nil
 }
 
 // GetSchemas returns schemas
@@ -689,4 +721,39 @@ func (conn *Connection) InsertStream(tableFName string, columns []string, stream
 	tx.Commit()
 
 	return nil
+}
+
+// GenerateDDL genrate a DDL based on a dataset
+func (conn *Connection) GenerateDDL(tableFName string, data Dataset) (string, error) {
+
+	columns := data.InferColumnTypes()
+	columnsDDL := []string{}
+
+	for _, col := range columns {
+		// convert from general type to native type
+		if _, ok := conn.Template.GeneralTypeMap[col.Type]; ok {
+			columnDDL := F(
+				"%s %s", 
+				col.Name,
+				conn.Template.GeneralTypeMap[col.Type],
+			)
+			columnsDDL = append(columnsDDL, columnDDL)
+		} else {
+			return "", errors.New(
+				F(
+					"No type mapping defined for '%s' for '%s'",
+					col.Type,
+					conn.Type,
+				),
+			)
+		}
+	}
+
+	ddl := R(
+		conn.Template.Core["create_table"],
+		"table", tableFName,
+		"col_types", strings.Join(columnsDDL, ",\n"),
+	)
+
+	return ddl, nil
 }
