@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 	"time"
+	"strings"
 
 	"github.com/stretchr/testify/assert"
 	// "github.com/gobuffalo/packr"
@@ -211,6 +212,8 @@ func TestPG(t *testing.T) {
 	// Drop all tables
 	_, err = conn.DropTable("person", "place", "transactions")
 	assert.NoError(t, err)
+
+	conn.Close()
 }
 
 func TestSQLite(t *testing.T) {
@@ -372,4 +375,47 @@ func TestSQLite(t *testing.T) {
 
 	err = os.Remove(SQLiteURL)
 	assert.NoError(t, err)
+
+	conn.Close()
+}
+
+
+
+func TestPGtoPG(t *testing.T) {
+	srcConn := Connection{
+		URL: PostgresURL,
+	}
+	tgtConn := Connection{
+		URL: PostgresURL,
+	}
+
+	err := srcConn.Connect()
+	assert.NoError(t, err)
+
+	err = tgtConn.Connect()
+	assert.NoError(t, err)
+
+	srcTable := "bank.mint_transactions"
+	tgtTable := "public.mint_transactions"
+
+	data, err := srcConn.GetDDL(srcTable)
+	assert.NoError(t, err)
+	ddl := data.Rows[0][0].(string)
+	newDdl := strings.Replace(ddl, srcTable, tgtTable, 1)
+
+	_, err = tgtConn.DropTable(tgtTable)
+	assert.NoError(t, err)
+
+	_, err = tgtConn.Db.Exec(newDdl)
+	assert.NoError(t, err)
+
+	streamRow, err := srcConn.StreamRows(`select * from ` + srcTable)
+	assert.NoError(t, err)
+
+	err = tgtConn.InsertStream(tgtTable, srcConn.Data.Fields, streamRow)
+	assert.NoError(t, err)
+
+	srcConn.Close()
+	tgtConn.Close()
+
 }

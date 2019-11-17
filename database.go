@@ -165,7 +165,7 @@ func processRec(rec map[string]interface{}) map[string]interface{} {
 		case time.Time:
 			rec[i] = val.(time.Time)
 		case nil:
-			rec[i] = nil
+			rec[i] = val
 		case int:
 			rec[i] = int64(val.(int))
 		case int8:
@@ -589,4 +589,104 @@ func (conn *Connection) RunAnalysisField(analysisName string, tableFName string,
 
 	sql := strings.Join(sqls, "\nUNION ALL\n")
 	return conn.Query(sql)
+}
+
+// InsertStreamBatch inserts a stream into a table in batch
+func (conn *Connection) InsertStreamBatch(tableFName string, columns []string, streamRow <-chan []interface{}) error {
+	batchSize := 5000
+
+	// replaceSQL replaces the instance occurrence of any string pattern with an increasing $n based sequence
+	replaceSQL := func(old, searchPattern string) string {
+		tmpCount := strings.Count(old, searchPattern)
+		for m := 1; m <= tmpCount; m++ {
+			old = strings.Replace(old, searchPattern, "$"+strconv.Itoa(m), 1)
+		}
+		return old
+	}
+
+	values := make([]string, len(columns))
+	placeholders := make([]string, len(columns))
+	for i := 0; i < len(columns); i++ {
+		values[i] = F("$%d", i+1)
+		placeholders[i] = "?"
+	}
+
+	insertTemplate := R(
+		"INSERT INTO {table} ({columns}) VALUES ",
+		"table", tableFName,
+		"columns", strings.Join(columns, ", "),
+		"values", strings.Join(values, ", "),
+	)
+
+	tx := conn.Db.MustBegin()
+	// rows := [][]interface{}{}
+	placeholderRows := []string{}
+	rowCounter := 0
+	vals := []interface{}{}
+	for row := range streamRow {
+		rowCounter++
+		// rows = append(rows, row)
+		placeholderRows = append(
+			placeholderRows,
+			"("+strings.Join(placeholders, ", ")+")",
+		)
+
+		vals = append(vals, row...)
+		if rowCounter%batchSize == 0 {
+			// Insert batch
+			placeholderSQL := strings.Join(placeholderRows, ", ")
+			insertSQL := replaceSQL(insertTemplate+placeholderSQL, "?")
+			// println(insertSQL)
+			stmt, _ := tx.Prepare(insertSQL)
+			_, err := stmt.Exec(vals...)
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+			placeholderRows = []string{}
+			vals = []interface{}{}
+		}
+	}
+
+	// Insert remaining
+	placeholderSQL := strings.Join(placeholderRows, ", ")
+	insertSQL := replaceSQL(insertTemplate+placeholderSQL, "?")
+	stmt, _ := tx.Prepare(insertSQL)
+	_, err := stmt.Exec(vals...)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	tx.Commit()
+
+	return nil
+}
+
+// InsertStream inserts a stream into a table
+func (conn *Connection) InsertStream(tableFName string, columns []string, streamRow <-chan []interface{}) error {
+
+	values := make([]string, len(columns))
+	for i := 0; i < len(columns); i++ {
+		values[i] = F("$%d", i+1)
+	}
+
+	insertTemplate := R(
+		"INSERT INTO {table} ({columns}) VALUES ({values})",
+		"table", tableFName,
+		"columns", strings.Join(columns, ", "),
+		"values", strings.Join(values, ", "),
+	)
+
+	tx := conn.Db.MustBegin()
+	for row := range streamRow {
+		// Do insert
+		_, err := tx.Exec(insertTemplate, row...)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	tx.Commit()
+
+	return nil
 }
