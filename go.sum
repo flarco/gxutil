@@ -56,6 +56,8 @@ github.com/amsokol/ignite-go-client v0.12.2/go.mod h1:K3tKJGcLQORFD+ds7f0f9fl88t
 github.com/apache/calcite-avatica-go/v3 v3.2.0/go.mod h1:Kipaz+iNp/AUBrUPxiLGjn1Km6PLkG0jZoL9VnwFMhg=
 github.com/apache/thrift v0.12.0/go.mod h1:cp2SuWMxlEZw2r+iP2GNCdIi4C1qmUzdZFSVb+bacwQ=
 github.com/armon/consul-api v0.0.0-20180202201655-eb2c6b5be1b6/go.mod h1:grANhF5doyWs3UAsr3K4I6qtAmlQcZDesFNEHPZAzj8=
+github.com/aws/aws-sdk-go v1.25.36 h1:4+TL/Y2G5hsR1zdfHmjNG1ou1WEqsSWk8v7m1GaDKyo=
+github.com/aws/aws-sdk-go v1.25.36/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN924inxo=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=

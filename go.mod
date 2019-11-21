@@ -9,6 +9,7 @@ require (
 	github.com/alecthomas/colour v0.1.0 // indirect
 	github.com/alecthomas/kong v0.2.1 // indirect
 	github.com/alecthomas/kong-hcl v0.2.0 // indirect
+	github.com/aws/aws-sdk-go v1.25.36
 	github.com/coreos/bbolt v1.3.3 // indirect
 	github.com/coreos/etcd v3.3.17+incompatible // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect

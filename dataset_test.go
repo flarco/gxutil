@@ -1,21 +1,65 @@
 package gxutil
 
 import (
+	"io/ioutil"
 	"os"
 	"testing"
+
 	"github.com/stretchr/testify/assert"
-	// "github.com/gobuffalo/packr"
+)
+var (
+	s3Bucket = os.Getenv("S3_BUCKET")
+	s3Region = os.Getenv("S3_REGION")
 )
 
+func TestS3(t *testing.T) {
+
+	csvPath := "templates/test1.1.csv"
+	s3Path := "test/test1.1.csv"
+
+	csv1 := CSV{Path: csvPath}
+
+	stream, err := csv1.ReadStream()
+	assert.NoError(t, err)
+	if err != nil {
+		return
+	}
+
+	data := Dataset{
+		Fields: csv1.Fields,
+		Stream: stream,
+	}
+
+	s3 := S3{
+		Bucket: s3Bucket,
+		Region: s3Region,
+	}
+
+	csvFile, err := os.Open(csvPath)
+	assert.NoError(t, err)
+
+	err = s3.WriteStream(s3Path, csvFile)
+	assert.NoError(t, err)
+
+	dataReader := data.NewReader()
+	err = s3.WriteStream(s3Path, dataReader)
+	assert.NoError(t, err)
+
+	s3Reader, err := s3.ReadStream(s3Path)
+	assert.NoError(t, err)
+
+	csvFile.Seek(0, 0)
+	csvReaderOut, err := ioutil.ReadAll(csvFile)
+	s3ReaderOut, err := ioutil.ReadAll(s3Reader)
+	csvFile.Close()
+	assert.NoError(t, err)
+	assert.Equal(t, string(csvReaderOut), string(s3ReaderOut))
+
+}
 func TestCSV(t *testing.T) {
 	err := os.Remove("test2.csv")
 
-	csv1 := CSV{
-		Path: "templates/test1.csv",
-	}
-	csv2 := CSV{
-		Path: "test2.csv",
-	}
+	csv1 := CSV{ Path: "templates/test1.csv" }
 
 	// Test streaming read & write
 	stream, err := csv1.ReadStream()
@@ -24,7 +68,10 @@ func TestCSV(t *testing.T) {
 		return
 	}
 
-	csv2.Fields = csv1.Fields
+	csv2 := CSV{
+		Path:   "test2.csv",
+		Fields: csv1.Fields,
+	}
 	err = csv2.WriteStream(stream)
 	assert.NoError(t, err)
 
@@ -41,8 +88,23 @@ func TestCSV(t *testing.T) {
 
 	err = data.WriteCsv("test0.csv")
 	assert.NoError(t, err)
-	
+
 	err = os.Remove("test0.csv")
 	err = os.Remove("test2.csv")
+
+	// csv3 := CSV{
+	// 	File:   data.Reader,
+	// 	Fields: csv1.Fields,
+	// }
+	// stream, err = csv3.ReadStream()
+	// assert.NoError(t, err)
+
+	// csv2 = CSV{
+	// 	Path:   "test2.csv",
+	// 	Fields: csv1.Fields,
+	// }
+	// err = csv2.WriteStream(stream)
+	// assert.NoError(t, err)
+	// err = os.Remove("test2.csv")
 
 }
