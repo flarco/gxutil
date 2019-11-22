@@ -447,17 +447,6 @@ func (s *S3) ReadStream(key string) (*io.PipeReader, error) {
 }
 
 
-// func (data *Dataset) Read(p []byte) (n int, err error) {
-// 	if r.readIndex >= int64(len(r.data)) {
-// 			err = io.EOF
-// 			return
-// 	}
-
-// 	n = copy(p, r.data[r.readIndex:])
-// 	r.readIndex += int64(n)
-// 	return
-// }
-
 // NewReader creates a Reader
 func (data *Dataset) NewReader() *io.PipeReader {
 	pipeR, pipeW := io.Pipe()

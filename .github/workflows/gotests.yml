@@ -32,6 +32,10 @@ jobs:
         POSTGRES_HOST: localhost
         POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
         POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        S3_REGION: ${{ secrets.S3_REGION }}
+        S3_BUCKET: ${{ secrets.S3_BUCKET }}
     
     # - name: Packer Build
     #   run: |
