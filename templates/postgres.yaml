@@ -306,83 +306,31 @@ function:
 
 # native to general
 native_type_map:
-  16: "integer"
-  # 17:'_bytea'
-  # 18:'name'
-  18: "string"
-  # 19:'_name'
-  20: "integer"
-  # 21:'int2vector'
-  21: "integer"
-  # 22:'_int2vector'
-  23: "integer"
-  # 24:'_regproc'
-  25: "string"
-  # 26:'oidvector'
-  # 26:'_oid'
-  # 27:'_tid'
-  # 28:'_xid'
-  # 29:'_cid'
-  # 30:'_oidvector'
-  114: "string"
-  142: "string"
-  # 600:'lseg'
-  # 600:'_point'
-  # 600:'box'
-  # 601:'_lseg'
-  # 602:'_path'
-  # 603:'_box'
-  # 604:'_polygon'
-  # 628:'_line'
-  # 650:'_cidr'
-  700: "float"
-  # 701:'point'
-  701: "double"
-  # 701:'line'
-  # 702:'_abstime'
-  # 703:'_reltime'
-  # 704:'_tinterval'
-  # 718:'_circle'
-  790: "number"
-  # 829:'_macaddr'
-  # 869:'_inet'
-  # 1033:'_aclitem'
-  1042: "string"
-  1043: "string"
-  1082: "datetime"
-  1083: "datetime"
-  1114: "datetime"
-  1184: "datetime"
-  # 1186:'_interval'
-  # 1266:'_timetz'
-  # 1560:'_bit'
-  # 1562:'_varbit'
-  1700: "number"
-  # 1790:'_refcursor'
-  # 2202:'_regprocedure'
-  # 2203:'_regoper'
-  # 2204:'_regoperator'
-  # 2205:'_regclass'
-  # 2206:'_regtype'
-  # 2249:'_record'
-  2275: "string"
-  2950: "string"
-  # 2970:'_txid_snapshot'
-  # 3220:'_pg_lsn'
-  # 3614:'_tsvector'
-  # 3615:'_tsquery'
-  # 3642:'_gtsvector'
-  # 3734:'_regconfig'
-  # 3769:'_regdictionary'
-  3802: "string"
+  int2: "integer"
+  int4: "integer"
+  int8: "integer"
   number: "integer"
+  serial2: "integer"
+  serial4: "integer"
+  serial8: "integer"
+  float4: "decimal"
+  float8: "decimal"
   numeric: "decimal"
   text: "string"
+  json: "string"
+  jsonb: "string"
+  varbit: "string"
+  name: "string"
+  char: "string"
   varchar: "string"
   varchar2: "string"
+  date: "datetime"
   datetime: "datetime"
   timestamp: "datetime"
   timestamp with time zone: "datetime"
+  timestamptz: "datetime"
+  timetz: "time"
+  bool: "bool"
 
 # general to native
 general_type_map:

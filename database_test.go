@@ -102,7 +102,7 @@ func TestPG(t *testing.T) {
 	data, err = conn.Query(`select * from transactions`)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 1)
-	assert.Equal(t, 65.657, data.GetRecords()[0]["amount"])
+	assert.Equal(t, 65.657, data.Records()[0]["amount"])
 
 	// GetSchemas
 	data, err = conn.GetSchemas()
@@ -124,25 +124,25 @@ func TestPG(t *testing.T) {
 	data, err = conn.GetColumns("public.person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, "text", data.GetRecords()[0]["data_type"])
+	assert.Equal(t, "text", data.Records()[0]["data_type"])
 
 	// GetPrimarkKeys
 	data, err = conn.GetPrimarkKeys("public.person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 1)
-	assert.Equal(t, "first_name", data.GetRecords()[0]["column_name"])
+	assert.Equal(t, "first_name", data.Records()[0]["column_name"])
 
 	// GetIndexes
 	data, err = conn.GetIndexes("public.place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, "city", data.GetRecords()[1]["column_name"])
+	assert.Equal(t, "city", data.Records()[1]["column_name"])
 
 	// GetColumnsFull
 	data, err = conn.GetColumnsFull("public.place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, "bigint", data.GetRecords()[2]["data_type"])
+	assert.Equal(t, "bigint", data.Records()[2]["data_type"])
 
 	// GetDDL of table
 	ddl, err := conn.GetDDL("public.place")
@@ -207,22 +207,22 @@ func TestPG(t *testing.T) {
 	data, err = conn.RunAnalysis("table_join_match", values)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, 0.0, data.GetRecords()[0]["t1_null_cnt"])
-	assert.Equal(t, 100.0, data.GetRecords()[1]["match_rate"])
+	assert.Equal(t, 0.0, data.Records()[0]["t1_null_cnt"])
+	assert.Equal(t, 100.0, data.Records()[1]["match_rate"])
 
 	// RunAnalysisTable field_stat
 	data, err = conn.RunAnalysisTable("table_count", "public.person", "public.place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, int64(2), data.GetRecords()[0]["cnt"])
-	assert.Equal(t, int64(3), data.GetRecords()[1]["cnt"])
+	assert.Equal(t, int64(2), data.Records()[0]["cnt"])
+	assert.Equal(t, int64(3), data.Records()[1]["cnt"])
 
 	// RunAnalysisField field_stat
 	data, err = conn.RunAnalysisField("field_stat", "public.person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, int64(2), data.GetRecords()[0]["tot_cnt"])
-	assert.Equal(t, int64(0), data.GetRecords()[1]["f_dup_cnt"])
+	assert.Equal(t, int64(2), data.Records()[0]["tot_cnt"])
+	assert.Equal(t, int64(0), data.Records()[1]["f_dup_cnt"])
 
 	PGtoPGTest(t, "public.transactions")
 
@@ -280,7 +280,7 @@ func TestSQLite(t *testing.T) {
 	data, err = conn.Query(`select * from transactions`)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 1)
-	assert.Equal(t, 65.657, data.GetRecords()[0]["amount"])
+	assert.Equal(t, 65.657, data.Records()[0]["amount"])
 
 	// GetSchemas
 	data, err = conn.GetSchemas()
@@ -302,25 +302,25 @@ func TestSQLite(t *testing.T) {
 	data, err = conn.GetColumns("person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, "varchar(255)", data.GetRecords()[0]["data_type"])
+	assert.Equal(t, "varchar(255)", data.Records()[0]["data_type"])
 
 	// GetPrimarkKeys
 	data, err = conn.GetPrimarkKeys("main.person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 1)
-	assert.Equal(t, "first_name", data.GetRecords()[0]["column_name"])
+	assert.Equal(t, "first_name", data.Records()[0]["column_name"])
 
 	// GetIndexes
 	data, err = conn.GetIndexes("main.place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, "city", data.GetRecords()[1]["column_name"])
+	assert.Equal(t, "city", data.Records()[1]["column_name"])
 
 	// GetColumnsFull
 	data, err = conn.GetColumnsFull("main.place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, "bigint", data.GetRecords()[2]["data_type"])
+	assert.Equal(t, "bigint", data.Records()[2]["data_type"])
 
 	// GetDDL of table
 	ddl, err := conn.GetDDL("main.place")
@@ -369,22 +369,22 @@ func TestSQLite(t *testing.T) {
 	data, err = conn.RunAnalysis("table_join_match", values)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, int64(0), data.GetRecords()[0]["t1_null_cnt"])
-	assert.Equal(t, 100.0, data.GetRecords()[1]["match_rate"])
+	assert.Equal(t, int64(0), data.Records()[0]["t1_null_cnt"])
+	assert.Equal(t, 100.0, data.Records()[1]["match_rate"])
 
 	// RunAnalysisTable field_stat
 	data, err = conn.RunAnalysisTable("table_count", "main.person", "main.place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, int64(2), data.GetRecords()[0]["cnt"])
-	assert.Equal(t, int64(3), data.GetRecords()[1]["cnt"])
+	assert.Equal(t, int64(2), data.Records()[0]["cnt"])
+	assert.Equal(t, int64(3), data.Records()[1]["cnt"])
 
 	// RunAnalysisField field_stat
 	data, err = conn.RunAnalysisField("field_stat", "main.person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, int64(2), data.GetRecords()[0]["tot_cnt"])
-	assert.Equal(t, int64(0), data.GetRecords()[1]["f_dup_cnt"])
+	assert.Equal(t, int64(2), data.Records()[0]["tot_cnt"])
+	assert.Equal(t, int64(0), data.Records()[1]["f_dup_cnt"])
 
 	// Drop all tables
 	_, err = conn.DropTable("person", "place", "transactions")

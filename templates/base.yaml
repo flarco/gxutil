@@ -322,12 +322,16 @@ native_type_map:
   float64: "decimal"
   float: "decimal"
   double: "decimal"
+  real: "decimal"
   date: "date"
   "datetime64[ns]": "datetime"
   timestamp: "timestamp"
+  text: "string"
   object: "string"
   string: "string"
-  boolean: "string"
+  varchar: "string"
+  boolean: "bool"
+  datetime: "datetime"
 
 # general to native
 general_type_map:

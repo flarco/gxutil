@@ -25,7 +25,7 @@ func (conn *PostgresConn) Connect() error {
 // InsertStream inserts a stream into a table
 func (conn *PostgresConn) InsertStream(tableFName string, ds Datastream) error {
 
-	columns := ds.Fields
+	columns := ds.GetFields()
 	schema, table := splitTableFullName(tableFName)
 
 	txn := conn.Db.MustBegin()

@@ -2,11 +2,13 @@ package gxutil
 
 import (
 	"compress/gzip"
+	"database/sql"
 	"encoding/csv"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -24,14 +26,14 @@ import (
 
 // Datastream is a stream of rows
 type Datastream struct {
-	Fields []string
-	Rows   chan []interface{}
+	Columns []Column
+	Rows    chan []interface{}
 }
 
 // Dataset is a query returned dataset
 type Dataset struct {
 	Result   *sqlx.Rows
-	Fields   []string
+	Columns  []Column
 	Rows     [][]interface{}
 	SQL      string
 	Duration float64
@@ -64,14 +66,10 @@ func Collect(ds *Datastream) Dataset {
 	var data Dataset
 
 	data.Result = nil
-	data.Fields = ds.Fields
+	data.Columns = ds.Columns
 	data.Rows = [][]interface{}{}
 
 	for row := range ds.Rows {
-		rec := map[string]interface{}{}
-		for i, val := range row {
-			rec[data.Fields[i]] = val
-		}
 		data.Rows = append(data.Rows, row)
 	}
 
@@ -116,7 +114,7 @@ func (data *Dataset) WriteCsv(path string) error {
 	w := csv.NewWriter(file)
 	defer w.Flush()
 
-	err = w.Write(data.Fields)
+	err = w.Write(data.GetFields())
 	Check(err, "error write row to csv file")
 
 	for _, row := range data.Rows {
@@ -168,12 +166,84 @@ func ParseString(s string) interface{} {
 	return s
 }
 
-// GetRecords return rows of maps
-func (data *Dataset) GetRecords() []map[string]interface{}{
+// GetFields return the fields of the Data
+func (ds *Datastream) GetFields() []string {
+	fields := make([]string, len(ds.Columns))
+
+	for j, column := range ds.Columns {
+		fields[j] = column.Name
+	}
+
+	return fields
+}
+
+// setFields sets the fields/columns of the Datastream
+func (ds *Datastream) setFields(fields []string) {
+	ds.Columns = make([]Column, len(fields))
+
+	for i, field := range fields {
+		ds.Columns[i] = Column{
+			Name:     field,
+			Position: int64(i + 1),
+			// Type:     "string",
+		}
+	}
+}
+
+// GetFields return the fields of the Data
+func (data *Dataset) GetFields() []string {
+	fields := make([]string, len(data.Columns))
+
+	for j, column := range data.Columns {
+		fields[j] = column.Name
+	}
+
+	return fields
+}
+
+// setFields sets the fields/columns of the Datastream
+func (data *Dataset) setFields(fields []string) {
+	data.Columns = make([]Column, len(fields))
+
+	for i, field := range fields {
+		data.Columns[i] = Column{
+			Name:     field,
+			Position: int64(i + 1),
+			// Type:     "string",
+		}
+	}
+}
+
+// setColumns sets the fields/columns of the Datastream
+func (data *Dataset) setColumns(colTypes []*sql.ColumnType, NativeTypeMap map[string]string) {
+	data.Columns = make([]Column, len(colTypes))
+
+	for i, colType := range colTypes {
+		Type := strings.ToLower(colType.DatabaseTypeName())
+		Type = strings.Split(Type, "(")[0]
+
+		if _, ok := NativeTypeMap[Type]; ok {
+			Type = NativeTypeMap[Type]
+		} else if Type != "" {
+			println(F("setColumns - type '%s' not found for col '%s'", Type, colType.Name()))
+		}
+
+		data.Columns[i] = Column{
+			Name:     colType.Name(),
+			Position: int64(i + 1),
+			Type:     Type,
+			colType:  colType,
+		}
+	}
+
+}
+
+// Records return rows of maps
+func (data *Dataset) Records() []map[string]interface{} {
 	records := make([]map[string]interface{}, len(data.Rows))
 	for i, row := range data.Rows {
 		rec := map[string]interface{}{}
-		for j, field := range data.Fields {
+		for j, field := range data.GetFields() {
 			rec[field] = row[j]
 		}
 		records[i] = rec
@@ -182,7 +252,7 @@ func (data *Dataset) GetRecords() []map[string]interface{}{
 }
 
 // InferColumnTypes determines the columns types
-func (data *Dataset) InferColumnTypes() []Column {
+func (data *Dataset) InferColumnTypes() {
 	const N = 1000 // Sample Size
 
 	type ColumnStats struct {
@@ -202,7 +272,7 @@ func (data *Dataset) InferColumnTypes() []Column {
 	var columns []Column
 	var stats []ColumnStats
 
-	for i, field := range data.Fields {
+	for i, field := range data.GetFields() {
 		columns = append(columns, Column{
 			Name:     field,
 			Position: int64(i + 1),
@@ -261,7 +331,7 @@ func (data *Dataset) InferColumnTypes() []Column {
 		}
 	}
 
-	for j := range data.Fields {
+	for j := range data.GetFields() {
 		// PrintV(stats[j])
 		if stats[j].stringCnt > 0 {
 			if stats[j].maxLen > 255 {
@@ -280,7 +350,7 @@ func (data *Dataset) InferColumnTypes() []Column {
 		}
 	}
 
-	return columns
+	data.Columns = columns
 }
 
 // Sample returns a sample of n rows
@@ -293,17 +363,13 @@ func (c *CSV) Sample(n int) (Dataset, error) {
 	}
 
 	data.Result = nil
-	data.Fields = ds.Fields
+	data.Columns = ds.Columns
 	data.Rows = [][]interface{}{}
 	count := 0
 	for row := range ds.Rows {
 		count++
 		if count > n {
 			break
-		}
-		rec := map[string]interface{}{}
-		for i, val := range row {
-			rec[data.Fields[i]] = val
 		}
 		data.Rows = append(data.Rows, row)
 	}
@@ -334,9 +400,9 @@ func (c *CSV) ReadStream() (Datastream, error) {
 	}
 
 	ds = Datastream{
-		Fields: row0,
-		Rows:   make(chan []interface{}),
+		Rows: make(chan []interface{}),
 	}
+	ds.setFields(row0)
 
 	go func() {
 		defer c.File.Close()
@@ -382,7 +448,7 @@ func (c *CSV) WriteStream(ds Datastream) error {
 	w := csv.NewWriter(c.File)
 	defer w.Flush()
 
-	err := w.Write(ds.Fields)
+	err := w.Write(ds.GetFields())
 	if err != nil {
 		return Error(err, "error write row to csv file")
 	}
@@ -507,9 +573,9 @@ func (ds *Datastream) NewReader() *io.PipeReader {
 	go func() {
 		w := csv.NewWriter(pipeW)
 
-		err := w.Write(ds.Fields)
+		err := w.Write(ds.GetFields())
 		if err != nil {
-			Check(err, "Error reading data.Fields")
+			Check(err, "Error writing ds.Fields")
 			pipeW.Close()
 		}
 

@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"database/sql"
+
 
 	"github.com/gobuffalo/packr"
 	"github.com/jinzhu/gorm"
@@ -43,6 +45,7 @@ type Column struct {
 	Position int64  `json:"position"`
 	Name     string `json:"name"`
 	Type     string `json:"type"`
+	colType  *sql.ColumnType
 }
 
 // Table represents a schemata table
@@ -73,6 +76,7 @@ type Template struct {
 	Analysis       map[string]string
 	Function       map[string]string
 	GeneralTypeMap map[string]string `yaml:"general_type_map"`
+	NativeTypeMap map[string]string `yaml:"native_type_map"`
 }
 
 // Connect connects to a database using sqlx
@@ -124,6 +128,7 @@ func (conn *Connection) LoadYAML() error {
 		Analysis:       map[string]string{},
 		Function:       map[string]string{},
 		GeneralTypeMap: map[string]string{},
+		NativeTypeMap: map[string]string{},
 	}
 
 	_, filename, _, _ := runtime.Caller(1)
@@ -173,6 +178,10 @@ func (conn *Connection) LoadYAML() error {
 
 	for key, val := range template.GeneralTypeMap {
 		conn.Template.GeneralTypeMap[key] = val
+	}
+
+	for key, val := range template.NativeTypeMap {
+		conn.Template.NativeTypeMap[key] = val
 	}
 
 	return nil
@@ -245,10 +254,10 @@ func (conn *Connection) StreamRecords(sql string) (<-chan map[string]interface{}
 	}
 
 	conn.Data.Result = result
-	conn.Data.Fields = fields
 	conn.Data.SQL = sql
 	conn.Data.Duration = time.Since(start).Seconds()
 	conn.Data.Rows = [][]interface{}{}
+	conn.Data.setFields(fields)
 
 	chnl := make(chan map[string]interface{})
 	go func() {
@@ -291,15 +300,20 @@ func (conn *Connection) StreamRows(sql string) (Datastream, error) {
 		return ds, Error(err, "result.Columns()")
 	}
 
+	colTypes, err := result.ColumnTypes()
+	if err != nil {
+		return ds, Error(err, "result.ColumnTypes()")
+	}
+
 	conn.Data.Result = result
-	conn.Data.Fields = fields
 	conn.Data.SQL = sql
 	conn.Data.Duration = time.Since(start).Seconds()
 	conn.Data.Rows = [][]interface{}{}
+	conn.Data.setColumns(colTypes, conn.Template.NativeTypeMap)
 
 
 	ds = Datastream{
-		Fields: conn.Data.Fields, 
+		Columns: conn.Data.Columns, 
 		Rows: make(chan []interface{}),
 	}
 	
@@ -488,7 +502,7 @@ func (conn *Connection) GetSchemata(schemaName string) (Schema, error) {
 
 	schema.Name = schemaName
 
-	for _, rec := range schemaData.GetRecords() {
+	for _, rec := range schemaData.Records() {
 		tableName := rec["table_name"].(string)
 
 		switch v := rec["is_view"].(type) {
@@ -578,7 +592,7 @@ func (conn *Connection) RunAnalysisField(analysisName string, tableFName string,
 			return Dataset{}, err
 		}
 
-		for _, rec := range result.GetRecords() {
+		for _, rec := range result.Records() {
 			fields = append(fields, rec["column_name"].(string))
 		}
 	}
@@ -671,16 +685,16 @@ func (conn *Connection) InsertStreamBatch(tableFName string, columns []string, s
 // InsertStream inserts a stream into a table
 func (conn *Connection) InsertStream(tableFName string, ds Datastream) error {
 
-	columns := ds.Fields
-	values := make([]string, len(columns))
-	for i := 0; i < len(columns); i++ {
+	fields := ds.GetFields()
+	values := make([]string, len(fields))
+	for i := 0; i < len(fields); i++ {
 		values[i] = F("$%d", i+1)
 	}
 
 	insertTemplate := R(
 		"INSERT INTO {table} ({columns}) VALUES ({values})",
 		"table", tableFName,
-		"columns", strings.Join(columns, ", "),
+		"columns", strings.Join(fields, ", "),
 		"values", strings.Join(values, ", "),
 	)
 
@@ -701,10 +715,10 @@ func (conn *Connection) InsertStream(tableFName string, ds Datastream) error {
 // GenerateDDL genrate a DDL based on a dataset
 func (conn *Connection) GenerateDDL(tableFName string, data Dataset) (string, error) {
 
-	columns := data.InferColumnTypes()
+	data.InferColumnTypes()
 	columnsDDL := []string{}
 
-	for _, col := range columns {
+	for _, col := range data.Columns {
 		// convert from general type to native type
 		if _, ok := conn.Template.GeneralTypeMap[col.Type]; ok {
 			columnDDL := F(
