@@ -258,7 +258,7 @@ func (conn *Connection) StreamRecords(sql string) (<-chan map[string]interface{}
 			rec := map[string]interface{}{}
 			err := result.MapScan(rec)
 			if err != nil {
-				// return nil, Error(err, "MapScan(rec)")
+				Check(err, "MapScan(rec)")
 				close(chnl)
 			}
 
@@ -274,21 +274,22 @@ func (conn *Connection) StreamRecords(sql string) (<-chan map[string]interface{}
 }
 
 // StreamRows the rows of a sql query, returns `result`, `error`
-func (conn *Connection) StreamRows(sql string) (<-chan []interface{}, error) {
+func (conn *Connection) StreamRows(sql string) (Datastream, error) {
+	var ds Datastream
 	start := time.Now()
 
-	if sql == "" {
-		return nil, errors.New("Empty Query")
+	if strings.TrimSpace(sql) == "" {
+		return ds, errors.New("Empty Query")
 	}
 
 	result, err := conn.Db.Queryx(sql)
 	if err != nil {
-		return nil, Error(err, "SQL Error for:\n"+sql)
+		return ds, Error(err, "SQL Error for:\n"+sql)
 	}
 
 	fields, err := result.Columns()
 	if err != nil {
-		return nil, Error(err, "result.Columns()")
+		return ds, Error(err, "result.Columns()")
 	}
 
 	conn.Data.Result = result
@@ -298,15 +299,20 @@ func (conn *Connection) StreamRows(sql string) (<-chan []interface{}, error) {
 	conn.Data.Records = []map[string]interface{}{}
 	conn.Data.Rows = [][]interface{}{}
 
-	chnl := make(chan []interface{})
+
+	ds = Datastream{
+		Fields: conn.Data.Fields, 
+		Rows: make(chan []interface{}),
+	}
+	
 	go func() {
 		for result.Next() {
 			// get records
 			rec := map[string]interface{}{}
 			err := result.MapScan(rec)
 			if err != nil {
-				// return nil, Error(err, "MapScan(rec)")
-				close(chnl)
+				Check(err, "MapScan(rec)")
+				break
 			}
 
 			rec = processRec(rec)
@@ -316,14 +322,14 @@ func (conn *Connection) StreamRows(sql string) (<-chan []interface{}, error) {
 			for _, field := range fields {
 				row = append(row, rec[field])
 			}
-			chnl <- row
+			ds.Rows <- row
 
 		}
 		// Ensure that at the end of the loop we close the channel!
-		close(chnl)
+		close(ds.Rows)
 	}()
 
-	return chnl, nil
+	return ds, nil
 
 }
 
@@ -459,9 +465,13 @@ func (conn *Connection) GetIndexes(tableFName string) (Dataset, error) {
 }
 
 // GetDDL returns DDL for given table.
-func (conn *Connection) GetDDL(tableFName string) (Dataset, error) {
+func (conn *Connection) GetDDL(tableFName string) (string, error) {
 	sql := getMetadataTableFName(conn, "ddl", tableFName)
-	return conn.Query(sql)
+	data, err := conn.Query(sql)
+	if err != nil {
+		return "", err
+	}
+	return data.Rows[0][0].(string), nil
 }
 
 func getMetadataTableFName(conn *Connection, template string, tableFName string) string {
@@ -695,8 +705,9 @@ func (conn *Connection) InsertStreamBatch(tableFName string, columns []string, s
 }
 
 // InsertStream inserts a stream into a table
-func (conn *Connection) InsertStream(tableFName string, columns []string, streamRow <-chan []interface{}) error {
+func (conn *Connection) InsertStream(tableFName string, ds Datastream) error {
 
+	columns := ds.Fields
 	values := make([]string, len(columns))
 	for i := 0; i < len(columns); i++ {
 		values[i] = F("$%d", i+1)
@@ -710,7 +721,7 @@ func (conn *Connection) InsertStream(tableFName string, columns []string, stream
 	)
 
 	tx := conn.Db.MustBegin()
-	for row := range streamRow {
+	for row := range ds.Rows {
 		// Do insert
 		_, err := tx.Exec(insertTemplate, row...)
 		if err != nil {

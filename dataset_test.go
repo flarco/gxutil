@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
 var (
 	s3Bucket = os.Getenv("S3_BUCKET")
 	s3Region = os.Getenv("S3_REGION")
@@ -19,15 +20,10 @@ func TestS3(t *testing.T) {
 
 	csv1 := CSV{Path: csvPath}
 
-	stream, err := csv1.ReadStream()
+	ds, err := csv1.ReadStream()
 	assert.NoError(t, err)
 	if err != nil {
 		return
-	}
-
-	data := Dataset{
-		Fields: csv1.Fields,
-		Stream: stream,
 	}
 
 	s3 := S3{
@@ -35,14 +31,17 @@ func TestS3(t *testing.T) {
 		Region: s3Region,
 	}
 
+	err = s3.Delete(s3Path)
+	assert.NoError(t, err)
+
 	csvFile, err := os.Open(csvPath)
 	assert.NoError(t, err)
 
 	err = s3.WriteStream(s3Path, csvFile)
 	assert.NoError(t, err)
 
-	dataReader := data.NewReader()
-	err = s3.WriteStream(s3Path, dataReader)
+	reader := ds.NewReader()
+	err = s3.WriteStream(s3Path, reader)
 	assert.NoError(t, err)
 
 	s3Reader, err := s3.ReadStream(s3Path)
@@ -59,24 +58,21 @@ func TestS3(t *testing.T) {
 func TestCSV(t *testing.T) {
 	err := os.Remove("test2.csv")
 
-	csv1 := CSV{ Path: "templates/test1.csv" }
+	csv1 := CSV{Path: "templates/test1.csv"}
 
 	// Test streaming read & write
-	stream, err := csv1.ReadStream()
+	ds, err := csv1.ReadStream()
 	assert.NoError(t, err)
 	if err != nil {
 		return
 	}
 
-	csv2 := CSV{
-		Path:   "test2.csv",
-		Fields: csv1.Fields,
-	}
-	err = csv2.WriteStream(stream)
+	csv2 := CSV{Path: "test2.csv"}
+	err = csv2.WriteStream(ds)
 	assert.NoError(t, err)
 
 	// Test read & write
-	data, err := ReadCSV("test2.csv")
+	data, err := ReadCsv("test2.csv")
 	assert.NoError(t, err)
 
 	assert.Len(t, data.Fields, 7)

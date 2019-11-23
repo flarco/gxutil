@@ -23,8 +23,9 @@ func (conn *PostgresConn) Connect() error {
 
 
 // InsertStream inserts a stream into a table
-func (conn *PostgresConn) InsertStream(tableFName string, columns []string, streamRow <-chan []interface{}) error {
+func (conn *PostgresConn) InsertStream(tableFName string, ds Datastream) error {
 
+	columns := ds.Fields
 	schema, table := splitTableFullName(tableFName)
 
 	txn := conn.Db.MustBegin()
@@ -34,7 +35,7 @@ func (conn *PostgresConn) InsertStream(tableFName string, columns []string, stre
 		return err
 	}
 
-	for row := range streamRow {
+	for row := range ds.Rows {
 		// Do insert
 		_, err := stmt.Exec(row...)
 		if err != nil {

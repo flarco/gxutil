@@ -82,11 +82,11 @@ func TestPG(t *testing.T) {
 	}
 	assert.Len(t, recs, 2)
 
-	streamRow, err := conn.StreamRows(`select * from person`)
+	stream, err := conn.StreamRows(`select * from person`)
 	assert.NoError(t, err)
 
 	rows := [][]interface{}{}
-	for row := range streamRow {
+	for row := range stream.Rows {
 		rows = append(rows, row)
 	}
 	assert.Len(t, rows, 2)
@@ -145,14 +145,14 @@ func TestPG(t *testing.T) {
 	assert.Equal(t, "bigint", data.Records[2]["data_type"])
 
 	// GetDDL of table
-	data, err = conn.GetDDL("public.place")
+	ddl, err := conn.GetDDL("public.place")
 	assert.NoError(t, err)
-	assert.Equal(t, "CREATE TABLE public.place\n(\n    country text NULL,\n    city text NULL,\n    telcode bigint NULL\n)", data.Rows[0][0])
+	assert.Equal(t, "CREATE TABLE public.place\n(\n    country text NULL,\n    city text NULL,\n    telcode bigint NULL\n)", ddl)
 
 	// GetDDL of view
-	data, err = conn.GetDDL("public.place_vw")
+	ddl, err = conn.GetDDL("public.place_vw")
 	assert.NoError(t, err)
-	assert.Equal(t, " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);", data.Rows[0][0])
+	assert.Equal(t, " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);", ddl)
 
 	// load Csv from test file
 	csv1 := CSV{
@@ -162,17 +162,17 @@ func TestPG(t *testing.T) {
 	assert.NoError(t, err)
 
 	csvTable := "public.test1"
-	ddl, err := conn.GenerateDDL(csvTable, sample)
+	ddl, err = conn.GenerateDDL(csvTable, sample)
 	assert.NoError(t, err)
 
 	_, err = conn.Db.Exec(ddl)
 	assert.NoError(t, err)
 
-	stream, err := csv1.ReadStream()
+	stream, err = csv1.ReadStream()
 	assert.NoError(t, err)
 
 	// import to database
-	err = conn.InsertStream(csvTable, csv1.Fields, stream)
+	err = conn.InsertStream(csvTable, stream)
 	assert.NoError(t, err)
 
 	// select back to assert equality
@@ -323,14 +323,14 @@ func TestSQLite(t *testing.T) {
 	assert.Equal(t, "bigint", data.Records[2]["data_type"])
 
 	// GetDDL of table
-	data, err = conn.GetDDL("main.place")
+	ddl, err := conn.GetDDL("main.place")
 	assert.NoError(t, err)
-	assert.Equal(t, "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )", data.Rows[0][0])
+	assert.Equal(t, "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )", ddl)
 
 	// GetDDL of view
-	data, err = conn.GetDDL("main.place_vw")
+	ddl, err = conn.GetDDL("main.place_vw")
 	assert.NoError(t, err)
-	assert.Equal(t, "CREATE VIEW place_vw as\n\tselect * from place\n\twhere telcode = 65", data.Rows[0][0])
+	assert.Equal(t, "CREATE VIEW place_vw as\n\tselect * from place\n\twhere telcode = 65", ddl)
 
 	// load Csv from seed file
 	// box := packr.NewBox("./seeds")
@@ -413,9 +413,8 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 	err = tgtConn.Connect()
 	assert.NoError(t, err)
 
-	data, err := srcConn.GetDDL(srcTable)
+	ddl, err := srcConn.GetDDL(srcTable)
 	assert.NoError(t, err)
-	ddl := data.Rows[0][0].(string)
 	newDdl := strings.Replace(ddl, srcTable, tgtTable, 1)
 
 	_, err = tgtConn.DropTable(tgtTable)
@@ -424,11 +423,11 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 	_, err = tgtConn.Db.Exec(newDdl)
 	assert.NoError(t, err)
 
-	streamRow, err := srcConn.StreamRows(`select * from ` + srcTable)
+	stream, err := srcConn.StreamRows(`select * from ` + srcTable)
 	assert.NoError(t, err)
 
 	if err == nil {
-		err = tgtConn.InsertStream(tgtTable, srcConn.Data.Fields, streamRow)
+		err = tgtConn.InsertStream(tgtTable, stream)
 		assert.NoError(t, err)
 	}
 

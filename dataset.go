@@ -15,30 +15,30 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cast"
 
-	// "github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
+// Datastream is a stream of rows
+type Datastream struct {
+	Fields []string
+	Rows   chan []interface{}
+}
+
 // Dataset is a query returned dataset
 type Dataset struct {
-	Result     *sqlx.Rows
-	Fields     []string
-	Records    []map[string]interface{}
-	Rows       [][]interface{}
-	SQL        string
-	Duration   float64
-	Stream     <-chan []interface{}
-	StreamFunc func()
-	pipeR      *io.PipeReader
+	Result   *sqlx.Rows
+	Fields   []string
+	Records  []map[string]interface{}
+	Rows     [][]interface{}
+	SQL      string
+	Duration float64
 }
 
 // CSV is a csv object
 type CSV struct {
-	Path    string
-	File    *os.File
-	Fields  []string
-	Records []map[string]interface{}
-	Rows    [][]interface{}
+	Path string
+	File *os.File
+	Data *Dataset
 }
 
 // S3 is a AWS s3 object
@@ -47,8 +47,8 @@ type S3 struct {
 	Region string
 }
 
-// ReadCSV reads CSV and returns dataset
-func ReadCSV(path string) (Dataset, error) {
+// ReadCsv reads CSV and returns dataset
+func ReadCsv(path string) (Dataset, error) {
 	var data Dataset
 
 	file, err := os.Open(path)
@@ -64,23 +64,31 @@ func ReadCSV(path string) (Dataset, error) {
 	return data, nil
 }
 
+// ReadCsvStream reads CSV and returns datasream
+func ReadCsvStream(path string) (Datastream, error) {
+	var dstream Datastream
+
+	return dstream, nil
+
+}
+
 // LoadFile loads data from a file
 func (data *Dataset) LoadFile(file *os.File) error {
 	csv1 := CSV{
 		File: file,
 	}
 
-	stream, err := csv1.ReadStream()
+	dstream, err := csv1.ReadStream()
 	if err != nil {
 		return err
 	}
 
 	data.Result = nil
-	data.Fields = csv1.Fields
+	data.Fields = dstream.Fields
 	data.Records = []map[string]interface{}{}
 	data.Rows = [][]interface{}{}
 
-	for row := range stream {
+	for row := range dstream.Rows {
 		rec := map[string]interface{}{}
 		for i, val := range row {
 			rec[data.Fields[i]] = val
@@ -113,6 +121,7 @@ func (data *Dataset) WriteCsv(path string) error {
 	return nil
 }
 
+// ParseString return an interface
 // string: "varchar"
 // integer: "integer"
 // decimal: "decimal"
@@ -120,8 +129,6 @@ func (data *Dataset) WriteCsv(path string) error {
 // datetime: "timestamp"
 // timestamp: "timestamp"
 // text: "text"
-
-// ParseString return an interface
 func ParseString(s string) interface{} {
 	// int
 	i, err := strconv.ParseInt(s, 10, 64)
@@ -258,17 +265,17 @@ func (data *Dataset) InferColumnTypes() []Column {
 func (c *CSV) Sample(n int) (Dataset, error) {
 	var data Dataset
 
-	stream, err := c.ReadStream()
+	ds, err := c.ReadStream()
 	if err != nil {
 		return data, err
 	}
 
 	data.Result = nil
-	data.Fields = c.Fields
+	data.Fields = ds.Fields
 	data.Records = []map[string]interface{}{}
 	data.Rows = [][]interface{}{}
 	count := 0
-	for row := range stream {
+	for row := range ds.Rows {
 		count++
 		if count > n {
 			break
@@ -281,36 +288,35 @@ func (c *CSV) Sample(n int) (Dataset, error) {
 		data.Records = append(data.Records, rec)
 	}
 
-	// set nil reopen file
 	c.File = nil
 
 	return data, nil
 }
 
 // ReadStream returns the read CSV stream
-func (c *CSV) ReadStream() (<-chan []interface{}, error) {
+func (c *CSV) ReadStream() (Datastream, error) {
+	var ds Datastream
+
 	if c.File == nil {
 		file, err := os.Open(c.Path)
 		if err != nil {
-			return nil, err
+			return ds, err
 		}
 		c.File = file
 	}
 
-	c.Fields = []string{}
-	c.Records = []map[string]interface{}{}
-	c.Rows = [][]interface{}{}
-
 	r := csv.NewReader(c.File)
 	row0, err := r.Read()
 	if err != nil {
-		return nil, err
+		return ds, err
 	} else if err == io.EOF {
-		return nil, nil
+		return ds, nil
 	}
 
-	c.Fields = row0
-	chnl := make(chan []interface{})
+	ds = Datastream{
+		Fields: row0,
+		Rows:   make(chan []interface{}),
+	}
 
 	go func() {
 		defer c.File.Close()
@@ -330,18 +336,18 @@ func (c *CSV) ReadStream() (<-chan []interface{}, error) {
 			for i, val := range row0 {
 				row[i] = val
 			}
-			chnl <- row
+			ds.Rows <- row
 
 		}
 		// Ensure that at the end of the loop we close the channel!
-		close(chnl)
+		close(ds.Rows)
 	}()
 
-	return chnl, nil
+	return ds, nil
 }
 
 // WriteStream to CSV file
-func (c *CSV) WriteStream(streamRow <-chan []interface{}) error {
+func (c *CSV) WriteStream(ds Datastream) error {
 
 	if c.File == nil {
 		file, err := os.Create(c.Path)
@@ -356,12 +362,12 @@ func (c *CSV) WriteStream(streamRow <-chan []interface{}) error {
 	w := csv.NewWriter(c.File)
 	defer w.Flush()
 
-	err := w.Write(c.Fields)
+	err := w.Write(ds.Fields)
 	if err != nil {
 		return Error(err, "error write row to csv file")
 	}
 
-	for row0 := range streamRow {
+	for row0 := range ds.Rows {
 		row := make([]string, len(row0))
 		for i, val := range row0 {
 			row[i] = val.(string)
@@ -439,27 +445,57 @@ func (s *S3) ReadStream(key string) (*io.PipeReader, error) {
 				Bucket: aws.String(s.Bucket),
 				Key:    aws.String(key),
 			})
-		Check(err, "Error downloading S3 File -> " + key)
+		Check(err, "Error downloading S3 File -> "+key)
 		pipeW.Close()
 	}()
 
 	return pipeR, nil
 }
 
+// Delete deletes an s3 object at provided key
+func (s *S3) Delete(key string) error {
+	sess := session.Must(session.NewSession(&aws.Config{
+		Credentials:      credentials.NewEnvCredentials(),
+		Region:           aws.String(s.Region),
+		S3ForcePathStyle: aws.Bool(true),
+		// Endpoint:    aws.String(endpoint),
+		// LogLevel: aws.LogLevel(aws.LogDebugWithHTTPBody),
+	}))
+
+	// Create S3 service client
+	svc := s3.New(sess)
+
+	_, err := svc.DeleteObject(&s3.DeleteObjectInput{
+		Bucket: aws.String(s.Bucket),
+		Key:    aws.String(key),
+	})
+
+	if err != nil {
+		return Error(err, "Unable to delete S3 object: "+key)
+	}
+
+	err = svc.WaitUntilObjectNotExists(&s3.HeadObjectInput{
+		Bucket: aws.String(s.Bucket),
+		Key:    aws.String(key),
+	})
+
+	return err
+}
 
 // NewReader creates a Reader
-func (data *Dataset) NewReader() *io.PipeReader {
+func (ds *Datastream) NewReader() *io.PipeReader {
 	pipeR, pipeW := io.Pipe()
 
 	go func() {
 		w := csv.NewWriter(pipeW)
 
-		err := w.Write(data.Fields)
+		err := w.Write(ds.Fields)
 		if err != nil {
+			Check(err, "Error reading data.Fields")
 			pipeW.Close()
 		}
 
-		for row0 := range data.Stream {
+		for row0 := range ds.Rows {
 			// convert to csv string
 			row := make([]string, len(row0))
 			for i, val := range row0 {
@@ -467,6 +503,7 @@ func (data *Dataset) NewReader() *io.PipeReader {
 			}
 			err := w.Write(row)
 			if err != nil {
+				Check(err, "Error w.Write(row)")
 				break
 			}
 			w.Flush()
