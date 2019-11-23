@@ -47,48 +47,17 @@ type S3 struct {
 	Region string
 }
 
-// ReadCsv reads CSV and returns dataset
-func ReadCsv(path string) (Dataset, error) {
+// Collect reads a stream and return a dataset
+func Collect (ds *Datastream) (Dataset) {
+
 	var data Dataset
 
-	file, err := os.Open(path)
-	if err != nil {
-		return data, err
-	}
-
-	err = data.LoadFile(file)
-	if err != nil {
-		return data, err
-	}
-
-	return data, nil
-}
-
-// ReadCsvStream reads CSV and returns datasream
-func ReadCsvStream(path string) (Datastream, error) {
-	var dstream Datastream
-
-	return dstream, nil
-
-}
-
-// LoadFile loads data from a file
-func (data *Dataset) LoadFile(file *os.File) error {
-	csv1 := CSV{
-		File: file,
-	}
-
-	dstream, err := csv1.ReadStream()
-	if err != nil {
-		return err
-	}
-
 	data.Result = nil
-	data.Fields = dstream.Fields
+	data.Fields = ds.Fields
 	data.Records = []map[string]interface{}{}
 	data.Rows = [][]interface{}{}
 
-	for row := range dstream.Rows {
+	for row := range ds.Rows {
 		rec := map[string]interface{}{}
 		for i, val := range row {
 			rec[data.Fields[i]] = val
@@ -97,7 +66,38 @@ func (data *Dataset) LoadFile(file *os.File) error {
 		data.Records = append(data.Records, rec)
 	}
 
-	return nil
+	return data
+}
+
+// ReadCsv reads CSV and returns dataset
+func ReadCsv(path string) (Dataset, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return Dataset{}, err
+	}
+
+	csv1 := CSV{
+		File: file,
+	}
+
+	ds, err := csv1.ReadStream()
+	if err != nil {
+		return Dataset{}, err
+	}
+	
+	data := Collect(&ds)
+
+	return data, nil
+}
+
+// ReadCsvStream reads CSV and returns datasream
+func ReadCsvStream(path string) (Datastream, error) {
+
+	csv1 := CSV{
+		Path: path,
+	}
+
+	return csv1.ReadStream()
 }
 
 // WriteCsv writes to a csv file
@@ -380,10 +380,8 @@ func (c *CSV) WriteStream(ds Datastream) error {
 	return nil
 }
 
-/*
-WriteStream  write to an S3 bucket (upload)
-Example: Database or CSV stream into S3 file
-*/
+// WriteStream  write to an S3 bucket (upload)
+// Example: Database or CSV stream into S3 file
 func (s *S3) WriteStream(key string, reader io.Reader) error {
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/s3/
 	// The session the S3 Uploader will use

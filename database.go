@@ -185,39 +185,39 @@ func processRec(rec map[string]interface{}) map[string]interface{} {
 
 		switch v := val.(type) {
 		case time.Time:
-			rec[i] = val.(time.Time)
+			rec[i] = cast.ToTime(val)
 		case nil:
 			rec[i] = val
 		case int:
-			rec[i] = int64(val.(int))
+			rec[i] = cast.ToInt64(val)
 		case int8:
-			rec[i] = int64(val.(int8))
+			rec[i] = cast.ToInt64(val)
 		case int16:
-			rec[i] = int64(val.(int16))
+			rec[i] = cast.ToInt64(val)
 		case int32:
-			rec[i] = int64(val.(int32))
+			rec[i] = cast.ToInt64(val)
 		case int64:
-			rec[i] = val.(int64)
+			rec[i] = cast.ToInt64(val)
 		case float32:
-			rec[i] = val.(float32)
+			rec[i] = cast.ToFloat32(val)
 		case float64:
-			rec[i] = val.(float64)
+			rec[i] = cast.ToFloat64(val)
 		case bool:
-			rec[i] = val.(bool)
+			rec[i] = cast.ToBool(val)
 		case []uint8:
-			arr := val.([]uint8)
-			buf := make([]byte, len(arr))
-			for j, n := range arr {
-				buf[j] = byte(n)
-			}
-			f, err := strconv.ParseFloat(string(buf), 64)
+			// arr := val.([]uint8)
+			// buf := make([]byte, len(arr))
+			// for j, n := range arr {
+			// 	buf[j] = byte(n)
+			// }
+			f, err := strconv.ParseFloat(cast.ToString(val), 64)
 			if err != nil {
-				rec[i] = string(buf)
+				rec[i] = cast.ToString(val)
 			} else {
 				rec[i] = f
 			}
 		default:
-			rec[i] = val.(string)
+			rec[i] = cast.ToString(val)
 			_ = fmt.Sprint(v)
 		}
 	}
@@ -333,53 +333,20 @@ func (conn *Connection) StreamRows(sql string) (Datastream, error) {
 
 }
 
+
 // Query runs a sql query, returns `result`, `error`
 func (conn *Connection) Query(sql string) (Dataset, error) {
-	start := time.Now()
-
-	if sql == "" {
-		return Dataset{}, errors.New("Empty Query")
-	}
-
-	result, err := conn.Db.Queryx(sql)
+	
+	ds, err := conn.StreamRows(sql)
 	if err != nil {
-		return conn.Data, Error(err, "SQL Error for:\n"+sql)
+		return Dataset{}, err
 	}
 
-	fields, err := result.Columns()
-	if err != nil {
-		return conn.Data, Error(err, "result.Columns()")
-	}
+	data := Collect(&ds)
+	conn.Data.Records = data.Records // StreamRows does not populate records
+	data.Duration = conn.Data.Duration // Collect does not time duration
 
-	conn.Data.Result = result
-	conn.Data.Fields = fields
-	conn.Data.SQL = sql
-	conn.Data.Duration = time.Since(start).Seconds()
-	conn.Data.Records = []map[string]interface{}{}
-	conn.Data.Rows = [][]interface{}{}
-
-	for result.Next() {
-		// get records
-		rec := map[string]interface{}{}
-		err := result.MapScan(rec)
-		if err != nil {
-			return conn.Data, Error(err, "MapScan(rec)")
-		}
-
-		rec = processRec(rec)
-
-		// add record
-		conn.Data.Records = append(conn.Data.Records, rec)
-
-		// add row
-		row := []interface{}{}
-		for _, field := range fields {
-			row = append(row, rec[field])
-		}
-		conn.Data.Rows = append(conn.Data.Rows, row)
-
-	}
-	return conn.Data, nil
+	return data, nil
 }
 
 func splitTableFullName(tableName string) (string, string) {
