@@ -248,7 +248,6 @@ func (conn *Connection) StreamRecords(sql string) (<-chan map[string]interface{}
 	conn.Data.Fields = fields
 	conn.Data.SQL = sql
 	conn.Data.Duration = time.Since(start).Seconds()
-	conn.Data.Records = []map[string]interface{}{}
 	conn.Data.Rows = [][]interface{}{}
 
 	chnl := make(chan map[string]interface{})
@@ -296,7 +295,6 @@ func (conn *Connection) StreamRows(sql string) (Datastream, error) {
 	conn.Data.Fields = fields
 	conn.Data.SQL = sql
 	conn.Data.Duration = time.Since(start).Seconds()
-	conn.Data.Records = []map[string]interface{}{}
 	conn.Data.Rows = [][]interface{}{}
 
 
@@ -343,7 +341,6 @@ func (conn *Connection) Query(sql string) (Dataset, error) {
 	}
 
 	data := Collect(&ds)
-	conn.Data.Records = data.Records // StreamRows does not populate records
 	data.Duration = conn.Data.Duration // Collect does not time duration
 
 	return data, nil
@@ -491,7 +488,7 @@ func (conn *Connection) GetSchemata(schemaName string) (Schema, error) {
 
 	schema.Name = schemaName
 
-	for _, rec := range schemaData.Records {
+	for _, rec := range schemaData.GetRecords() {
 		tableName := rec["table_name"].(string)
 
 		switch v := rec["is_view"].(type) {
@@ -581,7 +578,7 @@ func (conn *Connection) RunAnalysisField(analysisName string, tableFName string,
 			return Dataset{}, err
 		}
 
-		for _, rec := range result.Records {
+		for _, rec := range result.GetRecords() {
 			fields = append(fields, rec["column_name"].(string))
 		}
 	}

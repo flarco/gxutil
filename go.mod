@@ -6,9 +6,11 @@ require (
 	cloud.google.com/go v0.47.0 // indirect
 	cloud.google.com/go/bigquery v1.1.0 // indirect
 	cloud.google.com/go/storage v1.1.2 // indirect
+	github.com/DataDog/zstd v1.4.4 // indirect
 	github.com/alecthomas/colour v0.1.0 // indirect
 	github.com/alecthomas/kong v0.2.1 // indirect
 	github.com/alecthomas/kong-hcl v0.2.0 // indirect
+	github.com/apache/thrift v0.13.0 // indirect
 	github.com/aws/aws-sdk-go v1.25.36
 	github.com/coreos/bbolt v1.3.3 // indirect
 	github.com/coreos/etcd v3.3.17+incompatible // indirect
@@ -61,6 +63,8 @@ require (
 	github.com/stretchr/testify v1.4.0
 	github.com/ugorji/go v1.1.7 // indirect
 	github.com/valyala/fasttemplate v1.1.0 // indirect
+	github.com/xitongsys/parquet-go v1.4.0
+	github.com/xitongsys/parquet-go-source v0.0.0-20191104003508-ecfa341356a6
 	github.com/xo/dburl v0.0.0-20191116074001-eeed741d1a6d // indirect
 	github.com/xo/usql v0.7.7 // indirect
 	go.etcd.io/bbolt v1.3.3 // indirect

@@ -91,8 +91,8 @@ func TestCSV(t *testing.T) {
 
 	assert.Len(t, data.Fields, 7)
 	assert.Len(t, data.Rows, 1000)
-	assert.Equal(t, "AOCG,\n883", data.Records[0]["first_name"])
-	assert.Equal(t, "EKOZ,989", data.Records[1]["last_name"])
+	assert.Equal(t, "AOCG,\n883", data.GetRecords()[0]["first_name"])
+	assert.Equal(t, "EKOZ,989", data.GetRecords()[1]["last_name"])
 
 	err = os.Remove("test0.csv")
 

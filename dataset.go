@@ -1,7 +1,6 @@
 package gxutil
 
 import (
-	"bufio"
 	"compress/gzip"
 	"encoding/csv"
 	"fmt"
@@ -18,6 +17,9 @@ import (
 	"github.com/spf13/cast"
 
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/xitongsys/parquet-go-source/writerfile"
+	"github.com/xitongsys/parquet-go/source"
+	"github.com/xitongsys/parquet-go/writer"
 )
 
 // Datastream is a stream of rows
@@ -30,7 +32,6 @@ type Datastream struct {
 type Dataset struct {
 	Result   *sqlx.Rows
 	Fields   []string
-	Records  []map[string]interface{}
 	Rows     [][]interface{}
 	SQL      string
 	Duration float64
@@ -41,6 +42,14 @@ type CSV struct {
 	Path string
 	File *os.File
 	Data *Dataset
+}
+
+// Parquet is a parquet object
+type Parquet struct {
+	Path  string
+	File  *os.File
+	PFile source.ParquetFile
+	Data  *Dataset
 }
 
 // S3 is a AWS s3 object
@@ -56,7 +65,6 @@ func Collect(ds *Datastream) Dataset {
 
 	data.Result = nil
 	data.Fields = ds.Fields
-	data.Records = []map[string]interface{}{}
 	data.Rows = [][]interface{}{}
 
 	for row := range ds.Rows {
@@ -65,7 +73,6 @@ func Collect(ds *Datastream) Dataset {
 			rec[data.Fields[i]] = val
 		}
 		data.Rows = append(data.Rows, row)
-		data.Records = append(data.Records, rec)
 	}
 
 	return data
@@ -159,6 +166,19 @@ func ParseString(s string) interface{} {
 	}
 
 	return s
+}
+
+// GetRecords return rows of maps
+func (data *Dataset) GetRecords() []map[string]interface{}{
+	records := make([]map[string]interface{}, len(data.Rows))
+	for i, row := range data.Rows {
+		rec := map[string]interface{}{}
+		for j, field := range data.Fields {
+			rec[field] = row[j]
+		}
+		records[i] = rec
+	}
+	return records
 }
 
 // InferColumnTypes determines the columns types
@@ -274,7 +294,6 @@ func (c *CSV) Sample(n int) (Dataset, error) {
 
 	data.Result = nil
 	data.Fields = ds.Fields
-	data.Records = []map[string]interface{}{}
 	data.Rows = [][]interface{}{}
 	count := 0
 	for row := range ds.Rows {
@@ -287,7 +306,6 @@ func (c *CSV) Sample(n int) (Dataset, error) {
 			rec[data.Fields[i]] = val
 		}
 		data.Rows = append(data.Rows, row)
-		data.Records = append(data.Records, rec)
 	}
 
 	c.File = nil
@@ -514,21 +532,6 @@ func (ds *Datastream) NewReader() *io.PipeReader {
 	return pipeR
 }
 
-func Compress2(reader io.Reader) io.Reader {
-	pr, pw := io.Pipe()
-	bufin := bufio.NewReader(reader)
-	gw := gzip.NewWriter(pw)
-
-	go func() {
-		_, err := bufin.WriteTo(gw)
-		Check(err, "Error gzip writing: bufin.WriteTo(gw)")
-		gw.Close()
-		pw.Close()
-	}()
-
-	return pr
-}
-
 // Compress uses gzip to compress
 func Compress(reader io.Reader) io.Reader {
 	pr, pw := io.Pipe()
@@ -547,4 +550,46 @@ func Compress(reader io.Reader) io.Reader {
 func Decompress(reader io.Reader) (io.Reader, error) {
 	gr, err := gzip.NewReader(reader)
 	return gr, err
+}
+
+// WriteStream to Parquet file from datastream
+func (p *Parquet) WriteStream(ds Datastream) error {
+
+	if p.File == nil {
+		file, err := os.Create(p.Path)
+		if err != nil {
+			return err
+		}
+		p.File = file
+	}
+
+	p.PFile = writerfile.NewWriterFile(p.File)
+
+	defer p.File.Close()
+
+	// Need to determine types
+	md := []string{
+		"name=Name, type=UTF8, encoding=PLAIN_DICTIONARY",
+		"name=Age, type=INT32",
+		"name=Id, type=INT64",
+		"name=Weight, type=FLOAT",
+		"name=Sex, type=BOOLEAN",
+	}
+
+	pw, err := writer.NewCSVWriter(md, p.PFile, 4)
+	if err != nil {
+		return err
+	}
+	defer pw.Flush(true)
+
+	for row := range ds.Rows {
+		err := pw.Write(row)
+		if err != nil {
+			return Error(err, "error write row to parquet file")
+		}
+	}
+
+	err = pw.WriteStop()
+
+	return err
 }
