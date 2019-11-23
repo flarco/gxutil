@@ -1,6 +1,8 @@
 package gxutil
 
 import (
+	"bufio"
+	"compress/gzip"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -48,7 +50,7 @@ type S3 struct {
 }
 
 // Collect reads a stream and return a dataset
-func Collect (ds *Datastream) (Dataset) {
+func Collect(ds *Datastream) Dataset {
 
 	var data Dataset
 
@@ -84,7 +86,7 @@ func ReadCsv(path string) (Dataset, error) {
 	if err != nil {
 		return Dataset{}, err
 	}
-	
+
 	data := Collect(&ds)
 
 	return data, nil
@@ -510,4 +512,39 @@ func (ds *Datastream) NewReader() *io.PipeReader {
 	}()
 
 	return pipeR
+}
+
+func Compress2(reader io.Reader) io.Reader {
+	pr, pw := io.Pipe()
+	bufin := bufio.NewReader(reader)
+	gw := gzip.NewWriter(pw)
+
+	go func() {
+		_, err := bufin.WriteTo(gw)
+		Check(err, "Error gzip writing: bufin.WriteTo(gw)")
+		gw.Close()
+		pw.Close()
+	}()
+
+	return pr
+}
+
+// Compress uses gzip to compress
+func Compress(reader io.Reader) io.Reader {
+	pr, pw := io.Pipe()
+	gw := gzip.NewWriter(pw)
+	go func() {
+		_, err := io.Copy(gw, reader)
+		Check(err, "Error gzip writing: io.Copy(gw, reader)")
+		gw.Close()
+		pw.Close()
+	}()
+
+	return pr
+}
+
+// Decompress uses gzip to decompress
+func Decompress(reader io.Reader) (io.Reader, error) {
+	gr, err := gzip.NewReader(reader)
+	return gr, err
 }

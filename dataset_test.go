@@ -34,6 +34,9 @@ func TestS3(t *testing.T) {
 	err = s3.Delete(s3Path)
 	assert.NoError(t, err)
 
+	err = s3.Delete(s3Path + ".gz")
+	assert.NoError(t, err)
+
 	csvFile, err := os.Open(csvPath)
 	assert.NoError(t, err)
 
@@ -41,7 +44,8 @@ func TestS3(t *testing.T) {
 	assert.NoError(t, err)
 
 	reader := ds.NewReader()
-	err = s3.WriteStream(s3Path, reader)
+	gzReader := Compress(reader)
+	err = s3.WriteStream(s3Path+".gz", gzReader)
 	assert.NoError(t, err)
 
 	s3Reader, err := s3.ReadStream(s3Path)
@@ -51,6 +55,16 @@ func TestS3(t *testing.T) {
 	csvReaderOut, err := ioutil.ReadAll(csvFile)
 	s3ReaderOut, err := ioutil.ReadAll(s3Reader)
 	csvFile.Close()
+	assert.NoError(t, err)
+	assert.Equal(t, string(csvReaderOut), string(s3ReaderOut))
+
+	s3Reader, err = s3.ReadStream(s3Path + ".gz")
+	assert.NoError(t, err)
+
+	gS3Reader, err := Decompress(s3Reader)
+	assert.NoError(t, err)
+
+	s3ReaderOut, err = ioutil.ReadAll(gS3Reader)
 	assert.NoError(t, err)
 	assert.Equal(t, string(csvReaderOut), string(s3ReaderOut))
 
