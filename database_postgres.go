@@ -23,7 +23,7 @@ func (conn *PostgresConn) Connect() error {
 
 
 // InsertStream inserts a stream into a table
-func (conn *PostgresConn) InsertStream(tableFName string, ds Datastream) error {
+func (conn *PostgresConn) InsertStream(tableFName string, ds Datastream) (count int64, err error) {
 
 	columns := ds.GetFields()
 	schema, table := splitTableFullName(tableFName)
@@ -32,33 +32,34 @@ func (conn *PostgresConn) InsertStream(tableFName string, ds Datastream) error {
 
 	stmt, err := txn.Prepare(pq.CopyInSchema(schema, table, columns...))
 	if err != nil {
-		return err
+		return count, err
 	}
 
 	for row := range ds.Rows {
+		count++
 		// Do insert
 		_, err := stmt.Exec(row...)
 		if err != nil {
 			txn.Rollback()
-			return err
+			return count, err
 		}
 	}
 
 	_, err = stmt.Exec()
 	if err != nil {
 		txn.Rollback()
-		return err
+		return count, err
 	}
 
 	err = stmt.Close()
 	if err != nil {
-		return err
+		return count, err
 	}
 
 	err = txn.Commit()
 	if err != nil {
-		return err
+		return count, err
 	}
 
-	return nil
+	return count, nil
 }

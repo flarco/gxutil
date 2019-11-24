@@ -688,7 +688,7 @@ func (conn *Connection) InsertStreamBatch(tableFName string, columns []string, s
 }
 
 // InsertStream inserts a stream into a table
-func (conn *Connection) InsertStream(tableFName string, ds Datastream) error {
+func (conn *Connection) InsertStream(tableFName string, ds Datastream) (count int64, err error) {
 
 	fields := ds.GetFields()
 	values := make([]string, len(fields))
@@ -705,16 +705,17 @@ func (conn *Connection) InsertStream(tableFName string, ds Datastream) error {
 
 	tx := conn.Db.MustBegin()
 	for row := range ds.Rows {
+		count++
 		// Do insert
 		_, err := tx.Exec(insertTemplate, row...)
 		if err != nil {
 			tx.Rollback()
-			return err
+			return count, err
 		}
 	}
 	tx.Commit()
 
-	return nil
+	return count, nil
 }
 
 // GenerateDDL genrate a DDL based on a dataset

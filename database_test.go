@@ -172,7 +172,7 @@ func TestPG(t *testing.T) {
 	assert.NoError(t, err)
 
 	// import to database
-	err = conn.InsertStream(csvTable, stream)
+	_, err = conn.InsertStream(csvTable, stream)
 	assert.NoError(t, err)
 
 	// select back to assert equality
@@ -427,7 +427,7 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 	assert.NoError(t, err)
 
 	if err == nil {
-		err = tgtConn.InsertStream(tgtTable, stream)
+		_, err = tgtConn.InsertStream(tgtTable, stream)
 		assert.NoError(t, err)
 	}
 
