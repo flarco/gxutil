@@ -15,7 +15,6 @@ core:
     from (select * from {temp_table}) as t2
     where {pk_fields_equal2}
   sample: SELECT {fields} FROM {table} TABLESAMPLE SYSTEM (50) limit {n}
-  limit: SELECT {fields} FROM {table} where limit {n}
 
 metadata:
     
