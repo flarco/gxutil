@@ -46,24 +46,22 @@ func TestPG(t *testing.T) {
 	select * from place
 	where telcode = 65
 	`
-	conn := PostgresConn{
-		URL: PostgresURL,
-	}
+	conn := GetConn(PostgresURL)
 	err := conn.Connect()
 	assert.NoError(t, err)
 
 	gConn, err := conn.GetGormConn()
 	assert.NoError(t, err)
 
-	_, err = conn.DropTable("person", "place", "transactions")
+	err = conn.DropTable("person", "place", "transactions")
 	assert.NoError(t, err)
 
-	// conn.Db.MustExec(tablesDDL)
+	// conn.Db().MustExec(tablesDDL)
 	gConn.SingularTable(true)
 	gConn.AutoMigrate(&person{}, &place{}, &transactions{})
-	conn.Db.MustExec(viewDdl)
+	conn.Db().MustExec(viewDdl)
 
-	tx := conn.Db.MustBegin()
+	tx := conn.Db().MustBegin()
 	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "Jason", "Moiron", "jmoiron@jmoiron.net")
 	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "John", "Doe", "johndoeDNE@gmail.net")
 	tx.MustExec("INSERT INTO place (country, city, telcode) VALUES ($1, $2, $3)", "United States", "New York", "1")
@@ -165,7 +163,7 @@ func TestPG(t *testing.T) {
 	ddl, err = conn.GenerateDDL(csvTable, sample)
 	assert.NoError(t, err)
 
-	_, err = conn.Db.Exec(ddl)
+	_, err = conn.Db().Exec(ddl)
 	assert.NoError(t, err)
 
 	stream, err = csv1.ReadStream()
@@ -186,11 +184,11 @@ func TestPG(t *testing.T) {
 	assert.Equal(t, "public", sData.Name)
 	assert.Contains(t, sData.Tables, "person")
 	assert.Contains(t, sData.Tables, "place_vw")
-	assert.Contains(t, conn.Schemata.Tables, "public.person")
+	assert.Contains(t, conn.Schemata().Tables, "public.person")
 	assert.Len(t, sData.Tables["person"].Columns, 3)
 	assert.Equal(t, "text", sData.Tables["person"].ColumnsMap["email"].Type)
 	assert.Equal(t, true, sData.Tables["place_vw"].IsView)
-	assert.Equal(t, int64(3), conn.Schemata.Tables["public.person"].ColumnsMap["email"].Position)
+	assert.Equal(t, int64(3), conn.Schemata().Tables["public.person"].ColumnsMap["email"].Position)
 
 	// RunAnalysis field_stat
 	values := map[string]interface{}{
@@ -227,7 +225,7 @@ func TestPG(t *testing.T) {
 	PGtoPGTest(t, "public.transactions")
 
 	// Drop all tables
-	_, err = conn.DropTable("person", "place", "transactions", "test1")
+	err = conn.DropTable("person", "place", "transactions", "test1")
 	assert.NoError(t, err)
 
 	conn.Close()
@@ -241,26 +239,23 @@ func TestSQLite(t *testing.T) {
 	select * from place
 	where telcode = 65
 	`
-	conn := Connection{
-		URL:  SQLiteURL,
-		Type: "sqlite3",
-	}
+	conn := GetConn("file:"+SQLiteURL)
 	err = conn.Connect()
 	assert.NoError(t, err)
 
 	gConn, err := conn.GetGormConn()
 	assert.NoError(t, err)
 
-	_, err = conn.DropTable("person", "place", "transactions")
+	err = conn.DropTable("person", "place", "transactions")
 	assert.NoError(t, err)
 
-	// conn.Db.MustExec(tablesDDL)
+	// conn.Db().MustExec(tablesDDL)
 	gConn.SingularTable(true)
 	gConn.AutoMigrate(&person{}, &place{}, &transactions{})
 	gConn.Close()
 
-	conn.Db.MustExec(viewDdl)
-	tx := conn.Db.MustBegin()
+	conn.Db().MustExec(viewDdl)
+	tx := conn.Db().MustBegin()
 	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "Jason", "Moiron", "jmoiron@jmoiron.net")
 	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "John", "Doe", "johndoeDNE@gmail.net")
 	tx.MustExec("INSERT INTO place (country, city, telcode) VALUES ($1, $2, $3)", "United States", "New York", "1")
@@ -348,11 +343,11 @@ func TestSQLite(t *testing.T) {
 	assert.Equal(t, "main", sData.Name)
 	assert.Contains(t, sData.Tables, "person")
 	assert.Contains(t, sData.Tables, "place_vw")
-	assert.Contains(t, conn.Schemata.Tables, "main.person")
+	assert.Contains(t, conn.Schemata().Tables, "main.person")
 	assert.Len(t, sData.Tables["person"].Columns, 3)
 	assert.Equal(t, "varchar(255)", sData.Tables["person"].ColumnsMap["email"].Type)
 	assert.Equal(t, true, sData.Tables["place_vw"].IsView)
-	assert.Equal(t, int64(3), conn.Schemata.Tables["main.person"].ColumnsMap["email"].Position)
+	assert.Equal(t, int64(3), conn.Schemata().Tables["main.person"].ColumnsMap["email"].Position)
 
 	// RunAnalysis field_stat
 	values := map[string]interface{}{
@@ -387,7 +382,7 @@ func TestSQLite(t *testing.T) {
 	assert.Equal(t, int64(0), data.Records()[1]["f_dup_cnt"])
 
 	// Drop all tables
-	_, err = conn.DropTable("person", "place", "transactions")
+	err = conn.DropTable("person", "place", "transactions")
 	assert.NoError(t, err)
 
 	err = os.Remove(SQLiteURL)
@@ -400,12 +395,8 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 	tgtTable := srcTable + "2"
 
 	// var srcConn, tgtConn PostgresConn
-	srcConn := PostgresConn{
-		URL: PostgresURL,
-	}
-	tgtConn := PostgresConn{
-		URL: PostgresURL,
-	}
+	srcConn := GetConn(PostgresURL)
+	tgtConn := GetConn(PostgresURL)
 
 	err := srcConn.Connect()
 	assert.NoError(t, err)
@@ -417,10 +408,10 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 	assert.NoError(t, err)
 	newDdl := strings.Replace(ddl, srcTable, tgtTable, 1)
 
-	_, err = tgtConn.DropTable(tgtTable)
+	err = tgtConn.DropTable(tgtTable)
 	assert.NoError(t, err)
 
-	_, err = tgtConn.Db.Exec(newDdl)
+	_, err = tgtConn.Db().Exec(newDdl)
 	assert.NoError(t, err)
 
 	stream, err := srcConn.StreamRows(`select * from ` + srcTable)
@@ -431,7 +422,7 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 		assert.NoError(t, err)
 	}
 
-	_, err = tgtConn.DropTable(tgtTable)
+	err = tgtConn.DropTable(tgtTable)
 	assert.NoError(t, err)
 
 	srcConn.Close()

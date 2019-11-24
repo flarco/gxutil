@@ -18,26 +18,45 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type connection interface {
-	Close() error
+// Connection is the Base interface for Connections
+type Connection interface {
 	Connect() error
+	Close() error
 	GetGormConn() (*gorm.DB, error)
 	LoadYAML() error
-	StreamRows(sql string) (<-chan []interface{}, error)
+	StreamRows(sql string) (Datastream, error)
 	Query(sql string) (Dataset, error)
-	GenerateDDL(tableFName string, data Dataset) string
+	GenerateDDL(tableFName string, data Dataset) (string, error)
+	GetDDL(string) (string, error)
+	DropTable(...string) (error)
+	InsertStream(tableFName string, ds Datastream) (count int64, err error)
+	Db() *sqlx.DB
+	Schemata() *Schemata
+
+	StreamRecords(sql string) (<-chan map[string]interface{}, error)
+	GetSchemata(string) (Schema, error)
+	GetSchemas() (Dataset, error)
+	GetTables(string) (Dataset, error)
+	GetViews(string) (Dataset, error)
+	GetColumns(string) (Dataset, error)
+	GetPrimarkKeys(string) (Dataset, error)
+	GetIndexes(string) (Dataset, error)
+	GetColumnsFull(string) (Dataset, error)
+	GetCount(string) (uint64, error)
+	RunAnalysis(string, map[string]interface{}) (Dataset, error)
+	RunAnalysisTable(string, ...string) (Dataset, error)
+	RunAnalysisField(string, string, ...string) (Dataset, error)
 }
 
-// Connection is a database connection
-type Connection struct {
-	connection
+// BaseConn is a database connection
+type BaseConn struct {
+	Connection
 	URL      string
 	Type     string // the type of database for sqlx: postgres, mysql, sqlite
-	Db       *sqlx.DB
-	db       gorm.DB
+	db       *sqlx.DB
 	Data     Dataset
 	Template Template
-	Schemata Schemata
+	schemata Schemata
 }
 
 // Column represents a schemata column
@@ -79,9 +98,34 @@ type Template struct {
 	NativeTypeMap map[string]string `yaml:"native_type_map"`
 }
 
-// Connect connects to a database using sqlx
-func (conn *Connection) Connect() error {
-	conn.Schemata = Schemata{
+// GetConn return the most proper connection for a given database
+func GetConn(URL string) Connection {
+	var conn Connection
+
+	if strings.HasPrefix(URL, "postgresql:") {
+		conn = &PostgresConn{URL: URL}
+	} else if strings.HasPrefix(URL, "file:") {
+		conn = &BaseConn{URL: URL, Type: "sqlite3"}
+	} else {
+		conn = &BaseConn{URL: URL}
+	}
+
+	return conn
+}
+
+
+// Db returns the sqlx db object
+func (conn *BaseConn) Db() *sqlx.DB {
+	return conn.db
+}
+// Schemata returns the Schemata object
+func (conn *BaseConn) Schemata() *Schemata {
+	return &conn.schemata
+}
+
+// Connect connects to the database
+func (conn *BaseConn) Connect() error {
+	conn.schemata = Schemata{
 		Schemas: map[string]Schema{},
 		Tables:  map[string]*Table{},
 	}
@@ -99,9 +143,9 @@ func (conn *Connection) Connect() error {
 		return Error(err, "Could not connect to DB")
 	}
 
-	conn.Db = db
+	conn.db = db
 
-	err = conn.Db.Ping()
+	err = conn.db.Ping()
 	if err != nil {
 		return Error(err, "Could not ping DB")
 	}
@@ -111,17 +155,17 @@ func (conn *Connection) Connect() error {
 }
 
 // Close closes the connection
-func (conn *Connection) Close() error {
-	return conn.Db.Close()
+func (conn *BaseConn) Close() error {
+	return conn.db.Close()
 }
 
 // GetGormConn returns the gorm db connection
-func (conn *Connection) GetGormConn() (*gorm.DB, error) {
+func (conn *BaseConn) GetGormConn() (*gorm.DB, error) {
 	return gorm.Open(conn.Type, conn.URL)
 }
 
 // LoadYAML loads the approriate yaml template
-func (conn *Connection) LoadYAML() error {
+func (conn *BaseConn) LoadYAML() error {
 	conn.Template = Template{
 		Core:           map[string]string{},
 		Metadata:       map[string]string{},
@@ -240,7 +284,7 @@ func processRec(rec map[string]interface{}) map[string]interface{} {
 }
 
 // StreamRecords the records of a sql query, returns `result`, `error`
-func (conn *Connection) StreamRecords(sql string) (<-chan map[string]interface{}, error) {
+func (conn *BaseConn) StreamRecords(sql string) (<-chan map[string]interface{}, error) {
 
 	start := time.Now()
 
@@ -248,7 +292,7 @@ func (conn *Connection) StreamRecords(sql string) (<-chan map[string]interface{}
 		return nil, errors.New("Empty Query")
 	}
 
-	result, err := conn.Db.Queryx(sql)
+	result, err := conn.db.Queryx(sql)
 	if err != nil {
 		return nil, Error(err, "SQL Error for:\n"+sql)
 	}
@@ -287,7 +331,7 @@ func (conn *Connection) StreamRecords(sql string) (<-chan map[string]interface{}
 }
 
 // StreamRows the rows of a sql query, returns `result`, `error`
-func (conn *Connection) StreamRows(sql string) (Datastream, error) {
+func (conn *BaseConn) StreamRows(sql string) (Datastream, error) {
 	var ds Datastream
 	start := time.Now()
 
@@ -295,7 +339,7 @@ func (conn *Connection) StreamRows(sql string) (Datastream, error) {
 		return ds, errors.New("Empty Query")
 	}
 
-	result, err := conn.Db.Queryx(sql)
+	result, err := conn.db.Queryx(sql)
 	if err != nil {
 		return ds, Error(err, "SQL Error for:\n"+sql)
 	}
@@ -352,7 +396,7 @@ func (conn *Connection) StreamRows(sql string) (Datastream, error) {
 
 
 // Query runs a sql query, returns `result`, `error`
-func (conn *Connection) Query(sql string) (Dataset, error) {
+func (conn *BaseConn) Query(sql string) (Dataset, error) {
 	
 	ds, err := conn.StreamRows(sql)
 	if err != nil {
@@ -383,7 +427,7 @@ func splitTableFullName(tableName string) (string, string) {
 }
 
 // GetCount returns count of records
-func (conn *Connection) GetCount(tableFName string) (uint64, error) {
+func (conn *BaseConn) GetCount(tableFName string) (uint64, error) {
 	sql := F(`select count(*) cnt from %s`, tableFName)
 	data, err := conn.Query(sql)
 	if err != nil {
@@ -393,27 +437,27 @@ func (conn *Connection) GetCount(tableFName string) (uint64, error) {
 }
 
 // GetSchemas returns schemas
-func (conn *Connection) GetSchemas() (Dataset, error) {
+func (conn *BaseConn) GetSchemas() (Dataset, error) {
 	// fields: [schema_name]
 	return conn.Query(conn.Template.Metadata["schemas"])
 }
 
 // GetObjects returns objects (tables or views) for given schema
 // `objectType` can be either 'table', 'view' or 'all'
-func (conn *Connection) GetObjects(schema string, objectType string) (Dataset, error) {
+func (conn *BaseConn) GetObjects(schema string, objectType string) (Dataset, error) {
 	sql := R(conn.Template.Metadata["objects"], "schema", schema, "object_type", objectType)
 	return conn.Query(sql)
 }
 
 // GetTables returns tables for given schema
-func (conn *Connection) GetTables(schema string) (Dataset, error) {
+func (conn *BaseConn) GetTables(schema string) (Dataset, error) {
 	// fields: [table_name]
 	sql := R(conn.Template.Metadata["tables"], "schema", schema)
 	return conn.Query(sql)
 }
 
 // GetViews returns views for given schema
-func (conn *Connection) GetViews(schema string) (Dataset, error) {
+func (conn *BaseConn) GetViews(schema string) (Dataset, error) {
 	// fields: [table_name]
 	sql := R(conn.Template.Metadata["views"], "schema", schema)
 	return conn.Query(sql)
@@ -422,7 +466,7 @@ func (conn *Connection) GetViews(schema string) (Dataset, error) {
 // GetColumns returns columns for given table. `tableFName` should
 // include schema and table, example: `schema1.table2`
 // fields should be `column_name|data_type`
-func (conn *Connection) GetColumns(tableFName string) (Dataset, error) {
+func (conn *BaseConn) GetColumns(tableFName string) (Dataset, error) {
 	sql := getMetadataTableFName(conn, "columns", tableFName)
 	return conn.Query(sql)
 }
@@ -430,25 +474,25 @@ func (conn *Connection) GetColumns(tableFName string) (Dataset, error) {
 // GetColumnsFull returns columns for given table. `tableName` should
 // include schema and table, example: `schema1.table2`
 // fields should be `schema_name|table_name|table_type|column_name|data_type|column_id`
-func (conn *Connection) GetColumnsFull(tableFName string) (Dataset, error) {
+func (conn *BaseConn) GetColumnsFull(tableFName string) (Dataset, error) {
 	sql := getMetadataTableFName(conn, "columns_full", tableFName)
 	return conn.Query(sql)
 }
 
 // GetPrimarkKeys returns primark keys for given table.
-func (conn *Connection) GetPrimarkKeys(tableFName string) (Dataset, error) {
+func (conn *BaseConn) GetPrimarkKeys(tableFName string) (Dataset, error) {
 	sql := getMetadataTableFName(conn, "primary_keys", tableFName)
 	return conn.Query(sql)
 }
 
 // GetIndexes returns indexes for given table.
-func (conn *Connection) GetIndexes(tableFName string) (Dataset, error) {
+func (conn *BaseConn) GetIndexes(tableFName string) (Dataset, error) {
 	sql := getMetadataTableFName(conn, "indexes", tableFName)
 	return conn.Query(sql)
 }
 
 // GetDDL returns DDL for given table.
-func (conn *Connection) GetDDL(tableFName string) (string, error) {
+func (conn *BaseConn) GetDDL(tableFName string) (string, error) {
 	sql := getMetadataTableFName(conn, "ddl", tableFName)
 	data, err := conn.Query(sql)
 	if err != nil {
@@ -457,7 +501,7 @@ func (conn *Connection) GetDDL(tableFName string) (string, error) {
 	return data.Rows[0][0].(string), nil
 }
 
-func getMetadataTableFName(conn *Connection, template string, tableFName string) string {
+func getMetadataTableFName(conn *BaseConn, template string, tableFName string) string {
 	schema, table := splitTableFullName(tableFName)
 	sql := R(
 		conn.Template.Metadata[template],
@@ -468,31 +512,26 @@ func getMetadataTableFName(conn *Connection, template string, tableFName string)
 }
 
 // DropTable drops given table.
-func (conn *Connection) DropTable(tableNames ...string) (Dataset, error) {
-
-	var (
-		result Dataset
-		err    error
-	)
+func (conn *BaseConn) DropTable(tableNames ...string) (err error) {
 
 	for _, tableName := range tableNames {
 		sql := R(conn.Template.Core["drop_table"], "table", tableName)
-		result, err = conn.Query(sql)
+		_, err = conn.Query(sql)
 		if err != nil {
-			return result, Error(err, "Error for "+sql)
+			return Error(err, "Error for "+sql)
 		}
 	}
-	return result, nil
+	return nil
 }
 
 // Import imports `data` into `tableName`
-func (conn *Connection) Import(data Dataset, tableName string) error {
+func (conn *BaseConn) Import(data Dataset, tableName string) error {
 
 	return nil
 }
 
 // GetSchemata obtain full schemata info
-func (conn *Connection) GetSchemata(schemaName string) (Schema, error) {
+func (conn *BaseConn) GetSchemata(schemaName string) (Schema, error) {
 
 	schema := Schema{
 		Name:   "",
@@ -542,18 +581,18 @@ func (conn *Connection) GetSchemata(schemaName string) (Schema, error) {
 		table.Columns = append(table.Columns, column)
 		table.ColumnsMap[column.Name] = &column
 
-		conn.Schemata.Tables[schemaName+"."+tableName] = &table
+		conn.schemata.Tables[schemaName+"."+tableName] = &table
 		schema.Tables[tableName] = table
 
 	}
 
-	conn.Schemata.Schemas[schemaName] = schema
+	conn.schemata.Schemas[schemaName] = schema
 
 	return schema, nil
 }
 
 // RunAnalysis runs an analysis
-func (conn *Connection) RunAnalysis(analysisName string, values map[string]interface{}) (Dataset, error) {
+func (conn *BaseConn) RunAnalysis(analysisName string, values map[string]interface{}) (Dataset, error) {
 	sql := Rm(
 		conn.Template.Analysis[analysisName],
 		values,
@@ -562,7 +601,7 @@ func (conn *Connection) RunAnalysis(analysisName string, values map[string]inter
 }
 
 // RunAnalysisTable runs a table level analysis
-func (conn *Connection) RunAnalysisTable(analysisName string, tableFNames ...string) (Dataset, error) {
+func (conn *BaseConn) RunAnalysisTable(analysisName string, tableFNames ...string) (Dataset, error) {
 
 	if len(tableFNames) == 0 {
 		return Dataset{}, errors.New("Need to provied tables for RunAnalysisTable")
@@ -585,7 +624,7 @@ func (conn *Connection) RunAnalysisTable(analysisName string, tableFNames ...str
 }
 
 // RunAnalysisField runs a field level analysis
-func (conn *Connection) RunAnalysisField(analysisName string, tableFName string, fields ...string) (Dataset, error) {
+func (conn *BaseConn) RunAnalysisField(analysisName string, tableFName string, fields ...string) (Dataset, error) {
 	schema, table := splitTableFullName(tableFName)
 
 	sqls := []string{}
@@ -617,7 +656,7 @@ func (conn *Connection) RunAnalysisField(analysisName string, tableFName string,
 }
 
 // InsertStreamBatch inserts a stream into a table in batch
-func (conn *Connection) InsertStreamBatch(tableFName string, columns []string, streamRow <-chan []interface{}) error {
+func (conn *BaseConn) InsertStreamBatch(tableFName string, columns []string, streamRow <-chan []interface{}) error {
 	batchSize := 5000
 
 	// replaceSQL replaces the instance occurrence of any string pattern with an increasing $n based sequence
@@ -643,7 +682,7 @@ func (conn *Connection) InsertStreamBatch(tableFName string, columns []string, s
 		"values", strings.Join(values, ", "),
 	)
 
-	tx := conn.Db.MustBegin()
+	tx := conn.db.MustBegin()
 	// rows := [][]interface{}{}
 	placeholderRows := []string{}
 	rowCounter := 0
@@ -688,7 +727,7 @@ func (conn *Connection) InsertStreamBatch(tableFName string, columns []string, s
 }
 
 // InsertStream inserts a stream into a table
-func (conn *Connection) InsertStream(tableFName string, ds Datastream) (count int64, err error) {
+func (conn *BaseConn) InsertStream(tableFName string, ds Datastream) (count int64, err error) {
 
 	fields := ds.GetFields()
 	values := make([]string, len(fields))
@@ -703,7 +742,7 @@ func (conn *Connection) InsertStream(tableFName string, ds Datastream) (count in
 		"values", strings.Join(values, ", "),
 	)
 
-	tx := conn.Db.MustBegin()
+	tx := conn.db.MustBegin()
 	for row := range ds.Rows {
 		count++
 		// Do insert
@@ -719,7 +758,7 @@ func (conn *Connection) InsertStream(tableFName string, ds Datastream) (count in
 }
 
 // GenerateDDL genrate a DDL based on a dataset
-func (conn *Connection) GenerateDDL(tableFName string, data Dataset) (string, error) {
+func (conn *BaseConn) GenerateDDL(tableFName string, data Dataset) (string, error) {
 
 	data.InferColumnTypes()
 	columnsDDL := []string{}

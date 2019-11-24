@@ -6,7 +6,7 @@ import (
 
 // PostgresConn is a Postgres connection
 type PostgresConn struct {
-	Connection
+	BaseConn
 	URL string
  }
 
@@ -14,11 +14,11 @@ type PostgresConn struct {
 // Connect connects to a database using sqlx
 func (conn *PostgresConn) Connect() error {
 
-	conn.Connection = Connection{
+	conn.BaseConn = BaseConn{
 		URL: conn.URL,
 		Type: "postgres",
 	}
-	return conn.Connection.Connect()
+	return conn.BaseConn.Connect()
 }
 
 
@@ -28,7 +28,7 @@ func (conn *PostgresConn) InsertStream(tableFName string, ds Datastream) (count 
 	columns := ds.GetFields()
 	schema, table := splitTableFullName(tableFName)
 
-	txn := conn.Db.MustBegin()
+	txn := conn.Db().MustBegin()
 
 	stmt, err := txn.Prepare(pq.CopyInSchema(schema, table, columns...))
 	if err != nil {
