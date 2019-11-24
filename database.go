@@ -32,6 +32,7 @@ type Connection interface {
 	InsertStream(tableFName string, ds Datastream) (count int64, err error)
 	Db() *sqlx.DB
 	Schemata() *Schemata
+	Template() *Template
 
 	StreamRecords(sql string) (<-chan map[string]interface{}, error)
 	GetSchemata(string) (Schema, error)
@@ -55,7 +56,7 @@ type BaseConn struct {
 	Type     string // the type of database for sqlx: postgres, mysql, sqlite
 	db       *sqlx.DB
 	Data     Dataset
-	Template Template
+	template Template
 	schemata Schemata
 }
 
@@ -123,6 +124,11 @@ func (conn *BaseConn) Schemata() *Schemata {
 	return &conn.schemata
 }
 
+// Template returns the Template object
+func (conn *BaseConn) Template() *Template {
+	return &conn.template
+}
+
 // Connect connects to the database
 func (conn *BaseConn) Connect() error {
 	conn.schemata = Schemata{
@@ -166,7 +172,7 @@ func (conn *BaseConn) GetGormConn() (*gorm.DB, error) {
 
 // LoadYAML loads the approriate yaml template
 func (conn *BaseConn) LoadYAML() error {
-	conn.Template = Template{
+	conn.template = Template{
 		Core:           map[string]string{},
 		Metadata:       map[string]string{},
 		Analysis:       map[string]string{},
@@ -183,7 +189,7 @@ func (conn *BaseConn) LoadYAML() error {
 		return Error(err, "box.FindString('base.yaml')")
 	}
 
-	if err := yaml.Unmarshal([]byte(baseTemplateBytes), &conn.Template); err != nil {
+	if err := yaml.Unmarshal([]byte(baseTemplateBytes), &conn.template); err != nil {
 		return Error(err, "yaml.Unmarshal")
 	}
 
@@ -205,27 +211,27 @@ func (conn *BaseConn) LoadYAML() error {
 	// PrintV(val)
 
 	for key, val := range template.Core {
-		conn.Template.Core[key] = val
+		conn.template.Core[key] = val
 	}
 
 	for key, val := range template.Analysis {
-		conn.Template.Analysis[key] = val
+		conn.template.Analysis[key] = val
 	}
 
 	for key, val := range template.Function {
-		conn.Template.Function[key] = val
+		conn.template.Function[key] = val
 	}
 
 	for key, val := range template.Metadata {
-		conn.Template.Metadata[key] = val
+		conn.template.Metadata[key] = val
 	}
 
 	for key, val := range template.GeneralTypeMap {
-		conn.Template.GeneralTypeMap[key] = val
+		conn.template.GeneralTypeMap[key] = val
 	}
 
 	for key, val := range template.NativeTypeMap {
-		conn.Template.NativeTypeMap[key] = val
+		conn.template.NativeTypeMap[key] = val
 	}
 
 	return nil
@@ -358,7 +364,7 @@ func (conn *BaseConn) StreamRows(sql string) (Datastream, error) {
 	conn.Data.SQL = sql
 	conn.Data.Duration = time.Since(start).Seconds()
 	conn.Data.Rows = [][]interface{}{}
-	conn.Data.setColumns(colTypes, conn.Template.NativeTypeMap)
+	conn.Data.setColumns(colTypes, conn.template.NativeTypeMap)
 
 
 	ds = Datastream{
@@ -439,27 +445,27 @@ func (conn *BaseConn) GetCount(tableFName string) (uint64, error) {
 // GetSchemas returns schemas
 func (conn *BaseConn) GetSchemas() (Dataset, error) {
 	// fields: [schema_name]
-	return conn.Query(conn.Template.Metadata["schemas"])
+	return conn.Query(conn.template.Metadata["schemas"])
 }
 
 // GetObjects returns objects (tables or views) for given schema
 // `objectType` can be either 'table', 'view' or 'all'
 func (conn *BaseConn) GetObjects(schema string, objectType string) (Dataset, error) {
-	sql := R(conn.Template.Metadata["objects"], "schema", schema, "object_type", objectType)
+	sql := R(conn.template.Metadata["objects"], "schema", schema, "object_type", objectType)
 	return conn.Query(sql)
 }
 
 // GetTables returns tables for given schema
 func (conn *BaseConn) GetTables(schema string) (Dataset, error) {
 	// fields: [table_name]
-	sql := R(conn.Template.Metadata["tables"], "schema", schema)
+	sql := R(conn.template.Metadata["tables"], "schema", schema)
 	return conn.Query(sql)
 }
 
 // GetViews returns views for given schema
 func (conn *BaseConn) GetViews(schema string) (Dataset, error) {
 	// fields: [table_name]
-	sql := R(conn.Template.Metadata["views"], "schema", schema)
+	sql := R(conn.template.Metadata["views"], "schema", schema)
 	return conn.Query(sql)
 }
 
@@ -504,7 +510,7 @@ func (conn *BaseConn) GetDDL(tableFName string) (string, error) {
 func getMetadataTableFName(conn *BaseConn, template string, tableFName string) string {
 	schema, table := splitTableFullName(tableFName)
 	sql := R(
-		conn.Template.Metadata[template],
+		conn.template.Metadata[template],
 		"schema", schema,
 		"table", table,
 	)
@@ -515,7 +521,7 @@ func getMetadataTableFName(conn *BaseConn, template string, tableFName string) s
 func (conn *BaseConn) DropTable(tableNames ...string) (err error) {
 
 	for _, tableName := range tableNames {
-		sql := R(conn.Template.Core["drop_table"], "table", tableName)
+		sql := R(conn.template.Core["drop_table"], "table", tableName)
 		_, err = conn.Query(sql)
 		if err != nil {
 			return Error(err, "Error for "+sql)
@@ -538,7 +544,7 @@ func (conn *BaseConn) GetSchemata(schemaName string) (Schema, error) {
 		Tables: map[string]Table{},
 	}
 
-	sql := R(conn.Template.Metadata["schemata"], "schema", schemaName)
+	sql := R(conn.template.Metadata["schemata"], "schema", schemaName)
 	schemaData, err := conn.Query(sql)
 	if err != nil {
 		return schema, Error(err, "Could not GetSchemata for "+schemaName)
@@ -594,7 +600,7 @@ func (conn *BaseConn) GetSchemata(schemaName string) (Schema, error) {
 // RunAnalysis runs an analysis
 func (conn *BaseConn) RunAnalysis(analysisName string, values map[string]interface{}) (Dataset, error) {
 	sql := Rm(
-		conn.Template.Analysis[analysisName],
+		conn.template.Analysis[analysisName],
 		values,
 	)
 	return conn.Query(sql)
@@ -612,7 +618,7 @@ func (conn *BaseConn) RunAnalysisTable(analysisName string, tableFNames ...strin
 	for _, tableFName := range tableFNames {
 		schema, table := splitTableFullName(tableFName)
 		sql := R(
-			conn.Template.Analysis[analysisName],
+			conn.template.Analysis[analysisName],
 			"schema", schema,
 			"table", table,
 		)
@@ -643,7 +649,7 @@ func (conn *BaseConn) RunAnalysisField(analysisName string, tableFName string, f
 
 	for _, field := range fields {
 		sql := R(
-			conn.Template.Analysis[analysisName],
+			conn.template.Analysis[analysisName],
 			"schema", schema,
 			"table", table,
 			"field", field,
@@ -765,11 +771,11 @@ func (conn *BaseConn) GenerateDDL(tableFName string, data Dataset) (string, erro
 
 	for _, col := range data.Columns {
 		// convert from general type to native type
-		if _, ok := conn.Template.GeneralTypeMap[col.Type]; ok {
+		if _, ok := conn.template.GeneralTypeMap[col.Type]; ok {
 			columnDDL := F(
 				"%s %s", 
 				col.Name,
-				conn.Template.GeneralTypeMap[col.Type],
+				conn.template.GeneralTypeMap[col.Type],
 			)
 			columnsDDL = append(columnsDDL, columnDDL)
 		} else {
@@ -784,7 +790,7 @@ func (conn *BaseConn) GenerateDDL(tableFName string, data Dataset) (string, erro
 	}
 
 	ddl := R(
-		conn.Template.Core["create_table"],
+		conn.template.Core["create_table"],
 		"table", tableFName,
 		"col_types", strings.Join(columnsDDL, ",\n"),
 	)

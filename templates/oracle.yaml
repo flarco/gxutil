@@ -5,7 +5,7 @@ core:
   insert: INSERT {options} INTO {table} ({names}) VALUES ({values})
   insert_option: /*+ APPEND NOLOGGING */
   sample: SELECT {fields} FROM {table} SAMPLE(50) where rownum <= {n}
-  limit: SELECT {fields} FROM {table} where rownum <= {n}
+  limit: SELECT {fields} FROM {table} where rownum <= {limit}
   replace: |
     merge into {table} tgt
     USING (SELECT {name_values}
