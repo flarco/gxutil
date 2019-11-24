@@ -187,50 +187,55 @@ func (conn *Connection) LoadYAML() error {
 	return nil
 }
 
-func processRec(rec map[string]interface{}) map[string]interface{} {
+func processVal(val interface{}) interface{} {
 
+	var nVal interface{}
+	switch v := val.(type) {
+	case time.Time:
+		nVal = cast.ToTime(val)
+	case nil:
+		nVal = val
+	case int:
+		nVal = cast.ToInt64(val)
+	case int8:
+		nVal = cast.ToInt64(val)
+	case int16:
+		nVal = cast.ToInt64(val)
+	case int32:
+		nVal = cast.ToInt64(val)
+	case int64:
+		nVal = cast.ToInt64(val)
+	case float32:
+		nVal = cast.ToFloat32(val)
+	case float64:
+		nVal = cast.ToFloat64(val)
+	case bool:
+		nVal = cast.ToBool(val)
+	case []uint8:
+		// arr := val.([]uint8)
+		// buf := make([]byte, len(arr))
+		// for j, n := range arr {
+		// 	buf[j] = byte(n)
+		// }
+		f, err := strconv.ParseFloat(cast.ToString(val), 64)
+		if err != nil {
+			nVal = cast.ToString(val)
+		} else {
+			nVal = f
+		}
+	default:
+		nVal = cast.ToString(val)
+		_ = fmt.Sprint(v)
+	}
+	return nVal
+
+}
+
+func processRec(rec map[string]interface{}) map[string]interface{} {
 	// Ensure usable types
 	for i, val := range rec {
-
-		switch v := val.(type) {
-		case time.Time:
-			rec[i] = cast.ToTime(val)
-		case nil:
-			rec[i] = val
-		case int:
-			rec[i] = cast.ToInt64(val)
-		case int8:
-			rec[i] = cast.ToInt64(val)
-		case int16:
-			rec[i] = cast.ToInt64(val)
-		case int32:
-			rec[i] = cast.ToInt64(val)
-		case int64:
-			rec[i] = cast.ToInt64(val)
-		case float32:
-			rec[i] = cast.ToFloat32(val)
-		case float64:
-			rec[i] = cast.ToFloat64(val)
-		case bool:
-			rec[i] = cast.ToBool(val)
-		case []uint8:
-			// arr := val.([]uint8)
-			// buf := make([]byte, len(arr))
-			// for j, n := range arr {
-			// 	buf[j] = byte(n)
-			// }
-			f, err := strconv.ParseFloat(cast.ToString(val), 64)
-			if err != nil {
-				rec[i] = cast.ToString(val)
-			} else {
-				rec[i] = f
-			}
-		default:
-			rec[i] = cast.ToString(val)
-			_ = fmt.Sprint(v)
-		}
+		rec[i] = processVal(val)
 	}
-
 	return rec
 }
 

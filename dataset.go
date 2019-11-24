@@ -11,17 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cast"
 
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/xitongsys/parquet-go-source/writerfile"
-	"github.com/xitongsys/parquet-go/source"
-	"github.com/xitongsys/parquet-go/writer"
 )
 
 // Datastream is a stream of rows
@@ -39,26 +31,7 @@ type Dataset struct {
 	Duration float64
 }
 
-// CSV is a csv object
-type CSV struct {
-	Path string
-	File *os.File
-	Data *Dataset
-}
 
-// Parquet is a parquet object
-type Parquet struct {
-	Path  string
-	File  *os.File
-	PFile source.ParquetFile
-	Data  *Dataset
-}
-
-// S3 is a AWS s3 object
-type S3 struct {
-	Bucket string
-	Region string
-}
 
 // Collect reads a stream and return a dataset
 func Collect(ds *Datastream) Dataset {
@@ -74,37 +47,6 @@ func Collect(ds *Datastream) Dataset {
 	}
 
 	return data
-}
-
-// ReadCsv reads CSV and returns dataset
-func ReadCsv(path string) (Dataset, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return Dataset{}, err
-	}
-
-	csv1 := CSV{
-		File: file,
-	}
-
-	ds, err := csv1.ReadStream()
-	if err != nil {
-		return Dataset{}, err
-	}
-
-	data := Collect(&ds)
-
-	return data, nil
-}
-
-// ReadCsvStream reads CSV and returns datasream
-func ReadCsvStream(path string) (Datastream, error) {
-
-	csv1 := CSV{
-		Path: path,
-	}
-
-	return csv1.ReadStream()
 }
 
 // WriteCsv writes to a csv file
@@ -185,7 +127,7 @@ func (ds *Datastream) setFields(fields []string) {
 		ds.Columns[i] = Column{
 			Name:     field,
 			Position: int64(i + 1),
-			// Type:     "string",
+			Type:     "string",
 		}
 	}
 }
@@ -353,221 +295,10 @@ func (data *Dataset) InferColumnTypes() {
 	data.Columns = columns
 }
 
-// Sample returns a sample of n rows
-func (c *CSV) Sample(n int) (Dataset, error) {
-	var data Dataset
 
-	ds, err := c.ReadStream()
-	if err != nil {
-		return data, err
-	}
 
-	data.Result = nil
-	data.Columns = ds.Columns
-	data.Rows = [][]interface{}{}
-	count := 0
-	for row := range ds.Rows {
-		count++
-		if count > n {
-			break
-		}
-		data.Rows = append(data.Rows, row)
-	}
-
-	c.File = nil
-
-	return data, nil
-}
-
-// ReadStream returns the read CSV stream
-func (c *CSV) ReadStream() (Datastream, error) {
-	var ds Datastream
-
-	if c.File == nil {
-		file, err := os.Open(c.Path)
-		if err != nil {
-			return ds, err
-		}
-		c.File = file
-	}
-
-	r := csv.NewReader(c.File)
-	row0, err := r.Read()
-	if err != nil {
-		return ds, err
-	} else if err == io.EOF {
-		return ds, nil
-	}
-
-	ds = Datastream{
-		Rows: make(chan []interface{}),
-	}
-	ds.setFields(row0)
-
-	go func() {
-		defer c.File.Close()
-
-		count := 1
-		for {
-			row0, err := r.Read()
-			if err == io.EOF {
-				break
-			} else if err != nil {
-				Check(err, "Error reading file")
-				break
-			}
-
-			count++
-			row := make([]interface{}, len(row0))
-			for i, val := range row0 {
-				row[i] = val
-			}
-			ds.Rows <- row
-
-		}
-		// Ensure that at the end of the loop we close the channel!
-		close(ds.Rows)
-	}()
-
-	return ds, nil
-}
-
-// WriteStream to CSV file
-func (c *CSV) WriteStream(ds Datastream) error {
-
-	if c.File == nil {
-		file, err := os.Create(c.Path)
-		if err != nil {
-			return err
-		}
-		c.File = file
-	}
-
-	defer c.File.Close()
-
-	w := csv.NewWriter(c.File)
-	defer w.Flush()
-
-	err := w.Write(ds.GetFields())
-	if err != nil {
-		return Error(err, "error write row to csv file")
-	}
-
-	for row0 := range ds.Rows {
-		row := make([]string, len(row0))
-		for i, val := range row0 {
-			row[i] = val.(string)
-		}
-		err := w.Write(row)
-		if err != nil {
-			return Error(err, "error write row to csv file")
-		}
-	}
-	return nil
-}
-
-// WriteStream  write to an S3 bucket (upload)
-// Example: Database or CSV stream into S3 file
-func (s *S3) WriteStream(key string, reader io.Reader) error {
-	// https://docs.aws.amazon.com/sdk-for-go/api/service/s3/
-	// The session the S3 Uploader will use
-	sess := session.Must(session.NewSession(&aws.Config{
-		Credentials:      credentials.NewEnvCredentials(),
-		Region:           aws.String(s.Region),
-		S3ForcePathStyle: aws.Bool(true),
-		// Endpoint:    aws.String(endpoint),
-		// LogLevel: aws.LogLevel(aws.LogDebugWithHTTPBody),
-	}))
-	uploader := s3manager.NewUploader(sess)
-	uploader.Concurrency = 10
-
-	// Upload the file to S3.
-	_, err := uploader.Upload(&s3manager.UploadInput{
-		Bucket: aws.String(s.Bucket),
-		Key:    aws.String(key),
-		Body:   reader,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to upload file, %v", err)
-	}
-	return nil
-}
-
-type fakeWriterAt struct {
-	w io.Writer
-}
-
-func (fw fakeWriterAt) WriteAt(p []byte, offset int64) (n int, err error) {
-	// ignore 'offset' because we forced sequential downloads
-	return fw.w.Write(p)
-}
-
-// ReadStream read from an S3 bucket (download)
-// Example: S3 file stream into Database or CSV
-func (s *S3) ReadStream(key string) (*io.PipeReader, error) {
-	// https://docs.aws.amazon.com/sdk-for-go/api/service/s3/
-	// The session the S3 Downloader will use
-	sess := session.Must(session.NewSession(&aws.Config{
-		Credentials:      credentials.NewEnvCredentials(),
-		Region:           aws.String(s.Region),
-		S3ForcePathStyle: aws.Bool(true),
-		// Endpoint:    aws.String(endpoint),
-		// LogLevel: aws.LogLevel(aws.LogDebugWithHTTPBody),
-	}))
-
-	// Create a downloader with the session and default options
-	downloader := s3manager.NewDownloader(sess)
-	downloader.Concurrency = 1
-
-	pipeR, pipeW := io.Pipe()
-
-	go func() {
-		// Write the contents of S3 Object to the file
-		_, err := downloader.Download(
-			fakeWriterAt{pipeW},
-			&s3.GetObjectInput{
-				Bucket: aws.String(s.Bucket),
-				Key:    aws.String(key),
-			})
-		Check(err, "Error downloading S3 File -> "+key)
-		pipeW.Close()
-	}()
-
-	return pipeR, nil
-}
-
-// Delete deletes an s3 object at provided key
-func (s *S3) Delete(key string) error {
-	sess := session.Must(session.NewSession(&aws.Config{
-		Credentials:      credentials.NewEnvCredentials(),
-		Region:           aws.String(s.Region),
-		S3ForcePathStyle: aws.Bool(true),
-		// Endpoint:    aws.String(endpoint),
-		// LogLevel: aws.LogLevel(aws.LogDebugWithHTTPBody),
-	}))
-
-	// Create S3 service client
-	svc := s3.New(sess)
-
-	_, err := svc.DeleteObject(&s3.DeleteObjectInput{
-		Bucket: aws.String(s.Bucket),
-		Key:    aws.String(key),
-	})
-
-	if err != nil {
-		return Error(err, "Unable to delete S3 object: "+key)
-	}
-
-	err = svc.WaitUntilObjectNotExists(&s3.HeadObjectInput{
-		Bucket: aws.String(s.Bucket),
-		Key:    aws.String(key),
-	})
-
-	return err
-}
-
-// NewReader creates a Reader
-func (ds *Datastream) NewReader() *io.PipeReader {
+// NewCsvReader creates a Reader
+func (ds *Datastream) NewCsvReader() *io.PipeReader {
 	pipeR, pipeW := io.Pipe()
 
 	go func() {
@@ -616,46 +347,4 @@ func Compress(reader io.Reader) io.Reader {
 func Decompress(reader io.Reader) (io.Reader, error) {
 	gr, err := gzip.NewReader(reader)
 	return gr, err
-}
-
-// WriteStream to Parquet file from datastream
-func (p *Parquet) WriteStream(ds Datastream) error {
-
-	if p.File == nil {
-		file, err := os.Create(p.Path)
-		if err != nil {
-			return err
-		}
-		p.File = file
-	}
-
-	p.PFile = writerfile.NewWriterFile(p.File)
-
-	defer p.File.Close()
-
-	// Need to determine types
-	md := []string{
-		"name=Name, type=UTF8, encoding=PLAIN_DICTIONARY",
-		"name=Age, type=INT32",
-		"name=Id, type=INT64",
-		"name=Weight, type=FLOAT",
-		"name=Sex, type=BOOLEAN",
-	}
-
-	pw, err := writer.NewCSVWriter(md, p.PFile, 4)
-	if err != nil {
-		return err
-	}
-	defer pw.Flush(true)
-
-	for row := range ds.Rows {
-		err := pw.Write(row)
-		if err != nil {
-			return Error(err, "error write row to parquet file")
-		}
-	}
-
-	err = pw.WriteStop()
-
-	return err
 }

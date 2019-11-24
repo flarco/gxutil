@@ -17,21 +17,20 @@ func TestS3(t *testing.T) {
 
 	csvPath := "templates/test1.1.csv"
 	s3Path := "test/test1.1.csv"
+	s3PathPq := "test/test1.1.parquet"
 
 	csv1 := CSV{Path: csvPath}
 
-	ds, err := csv1.ReadStream()
-	assert.NoError(t, err)
-	if err != nil {
-		return
-	}
 
 	s3 := S3{
 		Bucket: s3Bucket,
 		Region: s3Region,
 	}
 
-	err = s3.Delete(s3Path)
+	err := s3.Delete(s3Path)
+	assert.NoError(t, err)
+
+	err = s3.Delete(s3PathPq)
 	assert.NoError(t, err)
 
 	err = s3.Delete(s3Path + ".gz")
@@ -43,7 +42,11 @@ func TestS3(t *testing.T) {
 	err = s3.WriteStream(s3Path, csvFile)
 	assert.NoError(t, err)
 
-	reader := ds.NewReader()
+	reader, err := csv1.NewReader()
+	assert.NoError(t, err)
+	if err != nil {
+		return
+	}
 	gzReader := Compress(reader)
 	err = s3.WriteStream(s3Path+".gz", gzReader)
 	assert.NoError(t, err)
