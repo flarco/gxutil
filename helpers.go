@@ -201,8 +201,10 @@ func LogError(E error) {
 
 // LogErrorExit handles logging of an error and exits, useful for reporting
 func LogErrorExit(E error) {
-	LogCRedErr(E.Error())
-	log.Fatal(E)
+	if E != nil {
+		LogCRedErr(E.Error())
+		log.Fatal(E)
+	}
 }
 
 // LogErrorMail handles logging of an error and mail it to self
