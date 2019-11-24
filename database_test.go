@@ -147,7 +147,7 @@ func TestPG(t *testing.T) {
 	// GetDDL of table
 	ddl, err := conn.GetDDL("public.place")
 	assert.NoError(t, err)
-	assert.Equal(t, "CREATE TABLE public.place\n(\n    country text NULL,\n    city text NULL,\n    telcode bigint NULL\n)", ddl)
+	assert.Equal(t, "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)", ddl)
 
 	// GetDDL of view
 	ddl, err = conn.GetDDL("public.place_vw")

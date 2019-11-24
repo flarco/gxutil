@@ -164,7 +164,7 @@ metadata:
           'CREATE TABLE ' || nspname || '.' || relname || E'\n(\n' ||
           array_to_string(
             array_agg(
-              '    ' || column_name || ' ' ||  type || ' '|| not_null
+              '    \"' || column_name || '\" ' ||  type || ' '|| not_null
             )
             , E',\n'
           ) || E'\n)' as ddl
