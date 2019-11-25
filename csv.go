@@ -174,12 +174,12 @@ func (c *CSV) ReadStream() (Datastream, error) {
 }
 
 // WriteStream to CSV file
-func (c *CSV) WriteStream(ds Datastream) error {
+func (c *CSV) WriteStream(ds Datastream) (cnt uint64, err error) {
 
 	if c.File == nil {
 		file, err := os.Create(c.Path)
 		if err != nil {
-			return err
+			return cnt, err
 		}
 		c.File = file
 	}
@@ -189,22 +189,23 @@ func (c *CSV) WriteStream(ds Datastream) error {
 	w := csv.NewWriter(c.File)
 	defer w.Flush()
 
-	err := w.Write(ds.GetFields())
+	err = w.Write(ds.GetFields())
 	if err != nil {
-		return Error(err, "error write row to csv file")
+		return cnt, Error(err, "error write row to csv file")
 	}
 
 	for row0 := range ds.Rows {
+		cnt++
 		row := make([]string, len(row0))
 		for i, val := range row0 {
 			row[i] = toString(val)
 		}
 		err := w.Write(row)
 		if err != nil {
-			return Error(err, "error write row to csv file")
+			return cnt, Error(err, "error write row to csv file")
 		}
 	}
-	return nil
+	return cnt, nil
 }
 
 

@@ -85,7 +85,7 @@ func TestCSV(t *testing.T) {
 	}
 
 	csv2 := CSV{Path: "test2.csv"}
-	err = csv2.WriteStream(ds)
+	_, err = csv2.WriteStream(ds)
 	assert.NoError(t, err)
 
 	// Test read & write
@@ -116,7 +116,7 @@ func TestCSV(t *testing.T) {
 	// 	Path:   "test2.csv",
 	// 	Fields: csv1.Fields,
 	// }
-	// err = csv2.WriteStream(stream)
+	// _, err = csv2.WriteStream(stream)
 	// assert.NoError(t, err)
 	// err = os.Remove("test2.csv")
 
