@@ -144,14 +144,11 @@ func (c *CSV) ReadStream() (Datastream, error) {
 		Columns: c.Columns,
 	}
 
-	sampleData := Dataset{}
 	count := 1
 	if ds.Columns == nil {
 		ds.setFields(row0)
 
 		// collect sample up to 1000 rows and infer types
-		sampleData.Columns = ds.Columns
-		
 		for {
 			row0, err := r.Read()
 			if err == io.EOF {
@@ -165,7 +162,7 @@ func (c *CSV) ReadStream() (Datastream, error) {
 			for i, val := range row0 {
 				row[i] = castVal(val, ds.Columns[i].Type)
 			}
-			sampleData.Rows = append(sampleData.Rows, row)
+			ds.Buffer = append(ds.Buffer, row)
 			count++
 
 			if count == 1000 {
@@ -173,6 +170,7 @@ func (c *CSV) ReadStream() (Datastream, error) {
 			}
 		}
 
+		sampleData := Dataset{Columns: ds.Columns, Rows: ds.Buffer}
 		sampleData.InferColumnTypes()
 		ds.Columns = sampleData.Columns
 	}
@@ -180,7 +178,7 @@ func (c *CSV) ReadStream() (Datastream, error) {
 	go func() {
 		defer c.File.Close()
 
-		for _, row := range sampleData.Rows {
+		for _, row := range ds.Buffer {
 			for i, val := range row {
 				row[i] = castVal(val, ds.Columns[i].Type)
 			}
