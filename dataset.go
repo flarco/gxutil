@@ -62,7 +62,7 @@ func (data *Dataset) WriteCsv(path string) error {
 	for _, row := range data.Rows {
 		rec := make([]string, len(row))
 		for i, val := range row {
-			rec[i] = val.(string)
+			rec[i] = cast.ToString(val)
 		}
 		err := w.Write(rec)
 		Check(err, "error write row to csv file")
@@ -229,7 +229,7 @@ func (data *Dataset) InferColumnTypes() {
 		}
 
 		for j, val := range row {
-			val = ParseString(val.(string))
+			val = ParseString(cast.ToString(val))
 			stats[j].totalCnt++
 
 			switch v := val.(type) {
@@ -314,7 +314,7 @@ func (ds *Datastream) NewCsvReader() *io.PipeReader {
 			// convert to csv string
 			row := make([]string, len(row0))
 			for i, val := range row0 {
-				row[i] = val.(string)
+				row[i] = cast.ToString(val)
 			}
 			err := w.Write(row)
 			if err != nil {

@@ -146,24 +146,49 @@ func (c *CSV) ReadStream() (Datastream, error) {
 
 	go func() {
 		defer c.File.Close()
+		sampleData := Dataset{
+			Columns: ds.Columns,
+		}
+
+		inferAndPush := func() {
+			// infers the column types and pushes to channel
+			sampleData.InferColumnTypes()
+			ds.Columns = sampleData.Columns
+			for _, rowS := range sampleData.Rows {
+				for i, val := range rowS {
+					rowS[i] = castVal(val, ds.Columns[i].Type)
+				}
+				ds.Rows <- rowS
+			}
+		}
 
 		count := 1
 		for {
 			row0, err := r.Read()
 			if err == io.EOF {
+				if len(sampleData.Rows) < 1000 {
+					inferAndPush()
+				}
 				break
 			} else if err != nil {
 				Check(err, "Error reading file")
 				break
 			}
 
-			count++
 			row := make([]interface{}, len(row0))
 			for i, val := range row0 {
 				row[i] = castVal(val, ds.Columns[i].Type)
 			}
-			ds.Rows <- row
-
+			if count < 1000 {
+				sampleData.Rows = append(sampleData.Rows, row)
+			} else if count == 1000 {
+				// need to infer type and push buffer
+				sampleData.Rows = append(sampleData.Rows, row)
+				inferAndPush()
+			} else {
+				ds.Rows <- row
+			}
+			count++
 		}
 		// Ensure that at the end of the loop we close the channel!
 		close(ds.Rows)
