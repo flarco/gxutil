@@ -112,6 +112,10 @@ func castVal(val interface{}, typ string) interface{} {
 	default:
 		nVal = cast.ToString(val)
 	}
+
+	if cast.ToString(val) == "" {
+		nVal = nil
+	}
 	return nVal
 }
 
