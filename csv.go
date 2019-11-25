@@ -185,7 +185,7 @@ func (c *CSV) WriteStream(ds Datastream) error {
 	for row0 := range ds.Rows {
 		row := make([]string, len(row0))
 		for i, val := range row0 {
-			row[i] = val.(string)
+			row[i] = cast.ToString(val)
 		}
 		err := w.Write(row)
 		if err != nil {
