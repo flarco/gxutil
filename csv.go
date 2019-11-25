@@ -187,7 +187,6 @@ func (c *CSV) WriteStream(ds Datastream) (cnt uint64, err error) {
 	defer c.File.Close()
 
 	w := csv.NewWriter(c.File)
-	defer w.Flush()
 
 	err = w.Write(ds.GetFields())
 	if err != nil {
@@ -204,6 +203,7 @@ func (c *CSV) WriteStream(ds Datastream) (cnt uint64, err error) {
 		if err != nil {
 			return cnt, Error(err, "error write row to csv file")
 		}
+		w.Flush()
 	}
 	return cnt, nil
 }
