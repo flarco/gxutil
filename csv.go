@@ -94,7 +94,6 @@ func toString(val interface{}) string {
 		_ = fmt.Sprint(v)
 		return cast.ToString(val)
 	}
-	return cast.ToString(val)
 }
 
 func castVal(val interface{}, typ string) interface{} {

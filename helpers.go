@@ -144,7 +144,7 @@ func strFloat64(val float64) string {
 
 // Log : print text
 func Log(text string) {
-	fmt.Println(fmt.Sprintf("%s -- %s", time.Now().Format("2006-01-02 15:04:05"), text))
+	fmt.Fprintf(os.Stderr, "%s -- %s\n", time.Now().Format("2006-01-02 15:04:05"), text)
 }
 
 // LogC : print text in specified color
@@ -172,25 +172,25 @@ func LogC(text string, col string, w io.Writer) {
 }
 
 // LogCGreen prints in green
-func LogCGreen(text string) { LogC(text, "green", os.Stdout) }
+func LogCGreen(text string) { LogC(text, "green", os.Stderr) }
 
 // LogCRed prints in red
-func LogCRed(text string) { LogC(text, "red", os.Stdout) }
+func LogCRed(text string) { LogC(text, "red", os.Stderr) }
 
 // LogCRedErr prints in red to Stderr
 func LogCRedErr(text string) { LogC(text, "red", os.Stderr) }
 
 // LogCBlue prints in blue
-func LogCBlue(text string) { LogC(text, "blue", os.Stdout) }
+func LogCBlue(text string) { LogC(text, "blue", os.Stderr) }
 
 // LogCMagenta print in magenta
-func LogCMagenta(text string) { LogC(text, "magenta", os.Stdout) }
+func LogCMagenta(text string) { LogC(text, "magenta", os.Stderr) }
 
 // LogCWhite prints in white
-func LogCWhite(text string) { LogC(text, "white", os.Stdout) }
+func LogCWhite(text string) { LogC(text, "white", os.Stderr) }
 
 // LogCCyan prints in white
-func LogCCyan(text string) { LogC(text, "cyan", os.Stdout) }
+func LogCCyan(text string) { LogC(text, "cyan", os.Stderr) }
 
 // LogError handles logging of an error, useful for reporting
 func LogError(E error) {
