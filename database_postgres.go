@@ -23,7 +23,7 @@ func (conn *PostgresConn) Connect() error {
 
 
 // InsertStream inserts a stream into a table
-func (conn *PostgresConn) InsertStream(tableFName string, ds Datastream) (count int64, err error) {
+func (conn *PostgresConn) InsertStream(tableFName string, ds Datastream) (count uint64, err error) {
 
 	columns := ds.GetFields()
 	schema, table := splitTableFullName(tableFName)

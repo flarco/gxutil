@@ -33,7 +33,7 @@ func ReadCsv(path string) (Dataset, error) {
 		return Dataset{}, err
 	}
 
-	data := Collect(&ds)
+	data := ds.Collect()
 
 	return data, nil
 }

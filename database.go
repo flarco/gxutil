@@ -1,7 +1,7 @@
 package gxutil
 
 import (
-	"github.com/spf13/cast"
+	"database/sql"
 	"errors"
 	"fmt"
 	"path"
@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"database/sql"
 
+	"github.com/spf13/cast"
 
 	"github.com/gobuffalo/packr"
 	"github.com/jinzhu/gorm"
@@ -28,11 +28,13 @@ type Connection interface {
 	Query(sql string) (Dataset, error)
 	GenerateDDL(tableFName string, data Dataset) (string, error)
 	GetDDL(string) (string, error)
-	DropTable(...string) (error)
-	InsertStream(tableFName string, ds Datastream) (count int64, err error)
+	DropTable(...string) error
+	InsertStream(tableFName string, ds Datastream) (count uint64, err error)
 	Db() *sqlx.DB
 	Schemata() *Schemata
 	Template() *Template
+	SetProp(string, string)
+	GetProp(string) string
 
 	StreamRecords(sql string) (<-chan map[string]interface{}, error)
 	GetSchemata(string) (Schema, error)
@@ -52,12 +54,13 @@ type Connection interface {
 // BaseConn is a database connection
 type BaseConn struct {
 	Connection
-	URL      string
-	Type     string // the type of database for sqlx: postgres, mysql, sqlite
-	db       *sqlx.DB
-	Data     Dataset
-	template Template
-	schemata Schemata
+	URL        string
+	Type       string // the type of database for sqlx: postgres, mysql, sqlite
+	db         *sqlx.DB
+	Data       Dataset
+	template   Template
+	schemata   Schemata
+	properties map[string]string
 }
 
 // Column represents a schemata column
@@ -96,7 +99,7 @@ type Template struct {
 	Analysis       map[string]string
 	Function       map[string]string
 	GeneralTypeMap map[string]string `yaml:"general_type_map"`
-	NativeTypeMap map[string]string `yaml:"native_type_map"`
+	NativeTypeMap  map[string]string `yaml:"native_type_map"`
 }
 
 // GetConn return the most proper connection for a given database
@@ -104,7 +107,11 @@ func GetConn(URL string) Connection {
 	var conn Connection
 
 	if strings.HasPrefix(URL, "postgresql:") {
-		conn = &PostgresConn{URL: URL}
+		if isRedshift(URL) {
+			conn = &RedshiftConn{URL: URL}
+		} else {
+			conn = &PostgresConn{URL: URL}
+		}
 	} else if strings.HasPrefix(URL, "file:") {
 		conn = &BaseConn{URL: URL, Type: "sqlite3"}
 	} else {
@@ -114,11 +121,11 @@ func GetConn(URL string) Connection {
 	return conn
 }
 
-
 // Db returns the sqlx db object
 func (conn *BaseConn) Db() *sqlx.DB {
 	return conn.db
 }
+
 // Schemata returns the Schemata object
 func (conn *BaseConn) Schemata() *Schemata {
 	return &conn.schemata
@@ -127,6 +134,16 @@ func (conn *BaseConn) Schemata() *Schemata {
 // Template returns the Template object
 func (conn *BaseConn) Template() *Template {
 	return &conn.template
+}
+
+// GetProp returns the value of a property
+func (conn *BaseConn) GetProp(key string) string {
+	return conn.properties[key]
+}
+
+// SetProp sets the value of a property
+func (conn *BaseConn) SetProp(key string, val string) {
+	conn.properties[key] = val
 }
 
 // Connect connects to the database
@@ -150,11 +167,14 @@ func (conn *BaseConn) Connect() error {
 	}
 
 	conn.db = db
+	conn.properties = map[string]string{}
 
 	err = conn.db.Ping()
 	if err != nil {
 		return Error(err, "Could not ping DB")
 	}
+
+	conn.SetProp("type", conn.Type)
 
 	LogCGreen(R(`connected to {g}`, "g", conn.Type))
 	return nil
@@ -178,7 +198,7 @@ func (conn *BaseConn) LoadYAML() error {
 		Analysis:       map[string]string{},
 		Function:       map[string]string{},
 		GeneralTypeMap: map[string]string{},
-		NativeTypeMap: map[string]string{},
+		NativeTypeMap:  map[string]string{},
 	}
 
 	_, filename, _, _ := runtime.Caller(1)
@@ -281,6 +301,14 @@ func processVal(val interface{}) interface{} {
 
 }
 
+func processRow(row []interface{}) []interface{} {
+	// Ensure usable types
+	for i, val := range row {
+		row[i] = processVal(val)
+	}
+	return row
+}
+
 func processRec(rec map[string]interface{}) map[string]interface{} {
 	// Ensure usable types
 	for i, val := range rec {
@@ -350,10 +378,10 @@ func (conn *BaseConn) StreamRows(sql string) (Datastream, error) {
 		return ds, Error(err, "SQL Error for:\n"+sql)
 	}
 
-	fields, err := result.Columns()
-	if err != nil {
-		return ds, Error(err, "result.Columns()")
-	}
+	// fields, err := result.Columns()
+	// if err != nil {
+	// 	return ds, Error(err, "result.Columns()")
+	// }
 
 	colTypes, err := result.ColumnTypes()
 	if err != nil {
@@ -366,29 +394,20 @@ func (conn *BaseConn) StreamRows(sql string) (Datastream, error) {
 	conn.Data.Rows = [][]interface{}{}
 	conn.Data.setColumns(colTypes, conn.template.NativeTypeMap)
 
-
 	ds = Datastream{
-		Columns: conn.Data.Columns, 
-		Rows: make(chan []interface{}),
+		Columns: conn.Data.Columns,
+		Rows:    make(chan []interface{}),
 	}
-	
+
 	go func() {
 		for result.Next() {
-			// get records
-			rec := map[string]interface{}{}
-			err := result.MapScan(rec)
+			// add row
+			row, err := result.SliceScan()
 			if err != nil {
 				Check(err, "MapScan(rec)")
 				break
 			}
-
-			rec = processRec(rec)
-
-			// add row
-			row := []interface{}{}
-			for _, field := range fields {
-				row = append(row, rec[field])
-			}
+			row = processRow(row)
 			ds.Rows <- row
 
 		}
@@ -400,16 +419,15 @@ func (conn *BaseConn) StreamRows(sql string) (Datastream, error) {
 
 }
 
-
 // Query runs a sql query, returns `result`, `error`
 func (conn *BaseConn) Query(sql string) (Dataset, error) {
-	
+
 	ds, err := conn.StreamRows(sql)
 	if err != nil {
 		return Dataset{}, err
 	}
 
-	data := Collect(&ds)
+	data := ds.Collect()
 	data.Duration = conn.Data.Duration // Collect does not time duration
 
 	return data, nil
@@ -733,7 +751,7 @@ func (conn *BaseConn) InsertStreamBatch(tableFName string, columns []string, str
 }
 
 // InsertStream inserts a stream into a table
-func (conn *BaseConn) InsertStream(tableFName string, ds Datastream) (count int64, err error) {
+func (conn *BaseConn) InsertStream(tableFName string, ds Datastream) (count uint64, err error) {
 
 	fields := ds.GetFields()
 	values := make([]string, len(fields))
@@ -773,7 +791,7 @@ func (conn *BaseConn) GenerateDDL(tableFName string, data Dataset) (string, erro
 		// convert from general type to native type
 		if _, ok := conn.template.GeneralTypeMap[col.Type]; ok {
 			columnDDL := F(
-				"%s %s", 
+				"%s %s",
 				col.Name,
 				conn.template.GeneralTypeMap[col.Type],
 			)

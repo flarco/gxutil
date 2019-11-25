@@ -13,13 +13,14 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cast"
-
 )
 
 // Datastream is a stream of rows
 type Datastream struct {
 	Columns []Column
 	Rows    chan []interface{}
+	Buffer  [][]interface{}
+	count   uint64
 }
 
 // Dataset is a query returned dataset
@@ -29,24 +30,6 @@ type Dataset struct {
 	Rows     [][]interface{}
 	SQL      string
 	Duration float64
-}
-
-
-
-// Collect reads a stream and return a dataset
-func Collect(ds *Datastream) Dataset {
-
-	var data Dataset
-
-	data.Result = nil
-	data.Columns = ds.Columns
-	data.Rows = [][]interface{}{}
-
-	for row := range ds.Rows {
-		data.Rows = append(data.Rows, row)
-	}
-
-	return data
 }
 
 // WriteCsv writes to a csv file
@@ -127,7 +110,62 @@ func (ds *Datastream) setFields(fields []string) {
 		ds.Columns[i] = Column{
 			Name:     field,
 			Position: int64(i + 1),
-			Type:     "string",
+			Type:     "",
+		}
+	}
+}
+
+// Collect reads a stream and return a dataset
+func (ds *Datastream) Collect() Dataset {
+
+	var data Dataset
+
+	data.Result = nil
+	data.Columns = ds.Columns
+	data.Rows = [][]interface{}{}
+
+	for row := range ds.Rows {
+		data.Rows = append(data.Rows, row)
+	}
+
+	return data
+}
+
+
+// InferTypes infers types if needed and add to Buffer
+// Experimental....
+func (ds *Datastream) InferTypes() {
+	infer := false
+	for _, col := range ds.Columns {
+		if col.Type == "" {
+			infer = true
+		}
+	}
+
+	if !infer {
+		return
+	}
+
+	c := 0
+	for row := range ds.Rows {
+		c++
+		ds.Buffer = append(ds.Buffer, row)
+		if c == 1000 {
+			data := Dataset{
+				Columns: ds.Columns,
+				Rows: ds.Buffer,
+			}
+			data.InferColumnTypes()
+			ds.Columns = data.Columns
+			buffer := make([][]interface{}, len(ds.Buffer))
+			for i, row1 := range ds.Buffer {
+				row2 := make([]interface{}, len(row1))
+				for j, val := range row1 {
+					row2[j] = castVal(val, ds.Columns[j].Type)
+				}
+				buffer[i] = row2
+			}
+			ds.Buffer = buffer // buffer is now typed
 		}
 	}
 }
@@ -295,11 +333,10 @@ func (data *Dataset) InferColumnTypes() {
 	data.Columns = columns
 }
 
-
-
 // NewCsvReader creates a Reader
 func (ds *Datastream) NewCsvReader() *io.PipeReader {
 	pipeR, pipeW := io.Pipe()
+	ds.count = 0
 
 	go func() {
 		w := csv.NewWriter(pipeW)
@@ -311,6 +348,7 @@ func (ds *Datastream) NewCsvReader() *io.PipeReader {
 		}
 
 		for row0 := range ds.Rows {
+			ds.count++
 			// convert to csv string
 			row := make([]string, len(row0))
 			for i, val := range row0 {
