@@ -119,7 +119,7 @@ func castVal(val interface{}, typ string) interface{} {
 	return nVal
 }
 
-// ReadStream returns the read CSV stream
+// ReadStream returns the read CSV stream with Line 1 as header
 func (c *CSV) ReadStream() (Datastream, error) {
 	var ds Datastream
 
@@ -144,35 +144,17 @@ func (c *CSV) ReadStream() (Datastream, error) {
 		Columns: c.Columns,
 	}
 
+	sampleData := Dataset{}
+	count := 1
 	if ds.Columns == nil {
 		ds.setFields(row0)
-	}
 
-	go func() {
-		defer c.File.Close()
-		sampleData := Dataset{
-			Columns: ds.Columns,
-		}
-
-		inferAndPush := func() {
-			// infers the column types and pushes to channel
-			sampleData.InferColumnTypes()
-			ds.Columns = sampleData.Columns
-			for _, rowS := range sampleData.Rows {
-				for i, val := range rowS {
-					rowS[i] = castVal(val, ds.Columns[i].Type)
-				}
-				ds.Rows <- rowS
-			}
-		}
-
-		count := 1
+		// collect sample up to 1000 rows and infer types
+		sampleData.Columns = ds.Columns
+		
 		for {
 			row0, err := r.Read()
 			if err == io.EOF {
-				if len(sampleData.Rows) < 1000 {
-					inferAndPush()
-				}
 				break
 			} else if err != nil {
 				Check(err, "Error reading file")
@@ -183,15 +165,42 @@ func (c *CSV) ReadStream() (Datastream, error) {
 			for i, val := range row0 {
 				row[i] = castVal(val, ds.Columns[i].Type)
 			}
-			if count < 1000 {
-				sampleData.Rows = append(sampleData.Rows, row)
-			} else if count == 1000 {
-				// need to infer type and push buffer
-				sampleData.Rows = append(sampleData.Rows, row)
-				inferAndPush()
-			} else {
-				ds.Rows <- row
+			sampleData.Rows = append(sampleData.Rows, row)
+			count++
+
+			if count == 1000 {
+				break
 			}
+		}
+
+		sampleData.InferColumnTypes()
+		ds.Columns = sampleData.Columns
+	}
+
+	go func() {
+		defer c.File.Close()
+
+		for _, row := range sampleData.Rows {
+			for i, val := range row {
+				row[i] = castVal(val, ds.Columns[i].Type)
+			}
+			ds.Rows <- row
+		}
+
+		for {
+			row0, err := r.Read()
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				Check(err, "Error reading file")
+				break
+			}
+
+			row := make([]interface{}, len(row0))
+			for i, val := range row0 {
+				row[i] = castVal(val, ds.Columns[i].Type)
+			}
+			ds.Rows <- row
 			count++
 		}
 		// Ensure that at the end of the loop we close the channel!
