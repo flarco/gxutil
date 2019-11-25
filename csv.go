@@ -5,6 +5,8 @@ import (
 	"encoding/csv"
 	"io"
 	"os"
+	"time"
+	"fmt"
 )
 
 // CSV is a csv object
@@ -82,6 +84,17 @@ func (c *CSV) Sample(n int) (Dataset, error) {
 	c.File = nil
 
 	return data, nil
+}
+
+func toString(val interface{}) string {
+	switch v := val.(type) {
+	case time.Time:
+		return cast.ToTime(val).Format("2006-01-02 15:04:05")
+	default:
+		_ = fmt.Sprint(v)
+		return cast.ToString(val)
+	}
+	return cast.ToString(val)
 }
 
 func castVal(val interface{}, typ string) interface{} {
@@ -185,7 +198,7 @@ func (c *CSV) WriteStream(ds Datastream) error {
 	for row0 := range ds.Rows {
 		row := make([]string, len(row0))
 		for i, val := range row0 {
-			row[i] = cast.ToString(val)
+			row[i] = toString(val)
 		}
 		err := w.Write(row)
 		if err != nil {
@@ -218,7 +231,7 @@ func (c *CSV) NewReader() (*io.PipeReader, error) {
 			// convert to csv string
 			row := make([]string, len(row0))
 			for i, val := range row0 {
-				row[i] = val.(string)
+				row[i] = toString(val)
 			}
 			err := w.Write(row)
 			if err != nil {

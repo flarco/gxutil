@@ -156,7 +156,7 @@ func (conn *BaseConn) Connect() error {
 		return Error(err, "Could not ping DB")
 	}
 
-	println(R(`connected to {g}`, "g", conn.Type))
+	LogCGreen(R(`connected to {g}`, "g", conn.Type))
 	return nil
 }
 
