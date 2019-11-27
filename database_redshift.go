@@ -31,8 +31,14 @@ func isRedshift(URL string) (isRs bool) {
 		return isRs
 	}
 	res, err := db.Queryx("select version() v")
+	if err != nil {
+		return isRs
+	}
 	res.Next()
 	row, err := res.SliceScan()
+	if err != nil {
+		return isRs
+	}
 	if strings.Contains(strings.ToLower(cast.ToString(row[0])), "redshift") {
 		isRs = true
 	}
