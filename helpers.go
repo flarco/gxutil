@@ -203,7 +203,7 @@ func LogError(E error) {
 func LogErrorExit(E error) {
 	if E != nil {
 		LogCRedErr(E.Error())
-		log.Fatal(E)
+		Panic(E, "")
 	}
 }
 
