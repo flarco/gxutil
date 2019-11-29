@@ -313,7 +313,7 @@ func (data *Dataset) InferColumnTypes() {
 
 	for j := range data.GetFields() {
 		// PrintV(stats[j])
-		if stats[j].stringCnt > 0 {
+		if stats[j].stringCnt > 0 || stats[j].nullCnt == stats[j].totalCnt {
 			if stats[j].maxLen > 255 {
 				columns[j].Type = "text"
 			} else {
