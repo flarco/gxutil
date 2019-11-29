@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"reflect"
 	"strconv"
@@ -202,7 +203,7 @@ func LogError(E error) {
 func LogErrorExit(E error) {
 	if E != nil {
 		LogCRedErr(E.Error())
-		Panic(E, "")
+		log.Fatal(E)
 	}
 }
 
