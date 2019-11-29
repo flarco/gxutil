@@ -1,6 +1,7 @@
 package gxutil
 
 import (
+	"fmt"
 	pq "github.com/lib/pq"
 )
 
@@ -41,7 +42,7 @@ func (conn *PostgresConn) InsertStream(tableFName string, ds Datastream) (count 
 		_, err := stmt.Exec(row...)
 		if err != nil {
 			txn.Rollback()
-			return count, err
+			return count, Error(err, "\n"+fmt.Sprint(row))
 		}
 	}
 
