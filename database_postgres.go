@@ -33,7 +33,7 @@ func (conn *PostgresConn) InsertStream(tableFName string, ds Datastream) (count 
 
 	stmt, err := txn.Prepare(pq.CopyInSchema(schema, table, columns...))
 	if err != nil {
-		return count, Error(err, "pq.CopyInSchema")
+		return count, Error(err, fmt.Sprint(table, columns))
 	}
 
 	for row := range ds.Rows {
