@@ -1,9 +1,10 @@
 package gxutil
 
 import (
-	"strings"
-	"os"
 	"errors"
+	"os"
+	"strings"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cast"
 )
@@ -11,7 +12,7 @@ import (
 // RedshiftConn is a Redshift connection
 type RedshiftConn struct {
 	BaseConn
-	URL      string
+	URL string
 }
 
 // Connect connects to a database using sqlx
@@ -19,7 +20,7 @@ func (conn *RedshiftConn) Connect() error {
 
 	conn.BaseConn = BaseConn{
 		URL:  conn.URL,
-		Type: "redshift",
+		Type: "postgres",
 	}
 	return conn.BaseConn.Connect()
 }
@@ -61,13 +62,13 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 
 	if s3.Bucket == "" {
 		LogErrorExit(errors.New("Need to set 's3Bucket' to copy to redshift"))
-	} 
+	}
 
 	if AwsID == "" || AwsAccessKey == "" {
 		LogErrorExit(errors.New("Need to set env vars 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' to copy to redshift"))
 	}
 
-	s3Path = s3Path+".gz"
+	s3Path = s3Path + ".gz"
 	err = s3.Delete(s3Path)
 	LogErrorExit(err)
 
@@ -84,11 +85,11 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 	escape delimiter ',' EMPTYASNULL BLANKSASNULL GZIP IGNOREHEADER 1 REMOVEQUOTES
 	-- TIMEFORMAT AS 'MM.DD.YYYY HH:MI:SS' DATEFORMAT AS 'MM.DD.YYYY'
 	`,
-	"tgt_table", tableFName,
-	"s3_bucket", s3.Bucket,
-	"s3_path", s3Path,
-	"aws_access_key_id", AwsID,
-	"aws_secret_access_key", AwsAccessKey,
+		"tgt_table", tableFName,
+		"s3_bucket", s3.Bucket,
+		"s3_path", s3Path,
+		"aws_access_key_id", AwsID,
+		"aws_secret_access_key", AwsAccessKey,
 	)
 	LogErrorExit(err)
 

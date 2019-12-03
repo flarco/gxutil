@@ -10,11 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cast"
-
 	"github.com/gobuffalo/packr"
 	"github.com/jinzhu/gorm"
 	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/spf13/cast"
 	"gopkg.in/yaml.v2"
 )
 
@@ -106,7 +107,7 @@ type Template struct {
 func GetConn(URL string) Connection {
 	var conn Connection
 
-	if strings.HasPrefix(URL, "postgresql:") {
+	if strings.HasPrefix(URL, "postgres") {
 		if isRedshift(URL) {
 			conn = &RedshiftConn{URL: URL}
 		} else {
@@ -154,13 +155,10 @@ func (conn *BaseConn) Connect() error {
 	}
 
 	if conn.Type == "" {
-		if strings.HasPrefix(conn.URL, "postgresql://") {
-			conn.Type = "postgres"
-		}
+		return errors.New("conn.Type needs to be specified")
 	}
-	if conn.Type != "" {
-		conn.LoadYAML()
-	}
+
+	conn.LoadYAML()
 	db, err := sqlx.Open(conn.Type, conn.URL)
 	if err != nil {
 		return Error(err, "Could not connect to DB")
