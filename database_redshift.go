@@ -20,7 +20,7 @@ func (conn *RedshiftConn) Connect() error {
 
 	conn.BaseConn = BaseConn{
 		URL:  conn.URL,
-		Type: "postgres",
+		Type: "redshift",
 	}
 	return conn.BaseConn.Connect()
 }
