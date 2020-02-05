@@ -69,11 +69,12 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 		LogErrorExit(errors.New("Need to set env vars 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' to copy to redshift"))
 	}
 
+	err = s3.Delete(s3Path)
+
 	fileCount := 0
 	for {
 		fileCount++
 		s3PartPath := F("%s/%03d.csv.gz", s3Path, fileCount)
-		err = s3.Delete(s3PartPath)
 		LogErrorExit(err)
 
 		reader := ds.NewCsvReader(fileRowLimit) // limit the rows so we can split the files
