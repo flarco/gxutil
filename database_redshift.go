@@ -91,19 +91,16 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 		}
 	}
 
-	sql := R(`COPY {tgt_table}
-	FROM 's3://{s3_bucket}/{s3_path}'
-	credentials 'aws_access_key_id={aws_access_key_id};aws_secret_access_key={aws_secret_access_key}'
-	CSV delimiter ',' EMPTYASNULL BLANKSASNULL GZIP IGNOREHEADER 1 ACCEPTANYDATE`,
+	txn := conn.Db().MustBegin()
+
+	sql := R(
+		conn.template.Core["copy_to"],
 		"tgt_table", tableFName,
 		"s3_bucket", s3.Bucket,
 		"s3_path", s3Path,
 		"aws_access_key_id", AwsID,
 		"aws_secret_access_key", AwsAccessKey,
 	)
-	LogErrorExit(err)
-
-	txn := conn.Db().MustBegin()
 	_, err = txn.Exec(sql)
 	LogErrorExit(err)
 
