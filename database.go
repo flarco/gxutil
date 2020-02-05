@@ -159,7 +159,13 @@ func (conn *BaseConn) Connect() error {
 	}
 
 	conn.LoadYAML()
-	db, err := sqlx.Open(conn.Type, conn.URL)
+
+	Type := conn.Type
+	if Type == "redshift" {
+		Type = "postgres"
+	}
+
+	db, err := sqlx.Open(Type, conn.URL)
 	if err != nil {
 		return Error(err, "Could not connect to DB")
 	}
@@ -171,8 +177,6 @@ func (conn *BaseConn) Connect() error {
 	if err != nil {
 		return Error(err, "Could not ping DB")
 	}
-
-	conn.SetProp("type", conn.Type)
 
 	LogCGreen(R(`connected to {g}`, "g", conn.Type))
 	return nil
