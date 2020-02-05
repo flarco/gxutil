@@ -72,7 +72,7 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 	fileCount := 0
 	for {
 		fileCount++
-		s3PartPath := F("%s/%s.%03d.csv.gz", s3Path, tableFName, fileCount)
+		s3PartPath := F("%s/%03d.csv.gz", s3Path, fileCount)
 		err = s3.Delete(s3PartPath)
 		LogErrorExit(err)
 
