@@ -1,5 +1,5 @@
 core:
-  drop_table: drop table if exists {}
+  drop_table: drop table if exists {table} cascade
   replace: insert into {table} ({names}) values ({values}) on conflict ({pk_fields}) do update set {set_fields}
   replace_temp: |
     insert into {table} ({names})
@@ -15,67 +15,172 @@ core:
     from (select * from {temp_table}) as t2
     where {pk_fields_equal2}
   sample: SELECT {fields} FROM {table} TABLESAMPLE SYSTEM (50) limit {n}
-  limit: SELECT {fields} FROM {table} where limit {n}
 
 metadata:
-  all_tables: |
-    with tables as (
-      select
-        table_catalog,
-        table_schema,
-        table_name,
-        case table_type
-          when 'BASE TABLE' then 'TABLE'
-          else table_type
-        end as table_type
-      from information_schema.tables
-    )
-    select
-      cols.table_schema as schema_name,
-      cols.table_name as table_name,
-      tables.table_type as table_type,
-      count(cols.column_name) as num_columns,
-      null::int num_rows,
-      null::date last_analyzed
-    from information_schema.columns cols
-    join tables
-      on tables.table_catalog = cols.table_catalog
-      and tables.table_schema = cols.table_schema
-      and tables.table_name = cols.table_name
-      group by cols.table_catalog, cols.table_schema, tables.table_type, cols.table_name
-      order by cols.table_catalog, cols.table_schema, cols.table_name
+    
+  schemas: |
+    select schema_name
+    from information_schema.schemata
+    where catalog_name = ( select current_catalog )
+    order by schema_name
+    
+  tables: |
+    select table_name
+    from information_schema.tables
+    where table_type = 'BASE TABLE'
+      and table_catalog = ( select current_catalog )
+      and table_schema = '{schema}'
+    order by table_name
+    
+  views: |
+    select table_name
+    from information_schema.tables
+    where table_type = 'VIEW'
+      and table_catalog = ( select current_catalog )
+      and table_schema = '{schema}'
+    order by table_name
 
-  all_columns: |
+  columns: |
+    select column_name, data_type
+    from information_schema.columns
+    where table_catalog = ( select current_catalog )
+      and table_schema = '{schema}'
+      and table_name = '{table}'
+    order by ordinal_position
+
+  primary_keys: |
+    select tco.constraint_name as pk_name,
+           kcu.ordinal_position as position,
+           kcu.column_name as column_name
+    from information_schema.table_constraints tco
+    join information_schema.key_column_usage kcu 
+         on kcu.constraint_name = tco.constraint_name
+         and kcu.constraint_schema = tco.constraint_schema
+         and kcu.constraint_name = tco.constraint_name
+    where kcu.table_schema = '{schema}'
+      and kcu.table_name = '{table}'
+    order by kcu.table_schema,
+             kcu.table_name,
+             position
+
+  indexes: |
+    select
+      i.relname as index_name,
+      a.attname as column_name
+    from
+      pg_class t,
+      pg_class i,
+      pg_index ix,
+      pg_attribute a,
+      pg_namespace n
+    where
+      t.oid = ix.indrelid
+      and i.oid = ix.indexrelid
+      and n.oid = i.relnamespace
+      and a.attrelid = t.oid
+      and a.attnum = ANY(ix.indkey)
+      and n.nspname = '{schema}' and t.relname = '{table}'
+    order by
+      t.relname,
+      i.relname     
+  
+  columns_full: |
     with tables as (
       select
         table_catalog,
         table_schema,
         table_name,
         case table_type
-          when 'BASE TABLE' then 'TABLE'
-          else table_type
-        end as table_type
+          when 'VIEW' then true
+          else false
+        end as is_view
       from information_schema.tables
+      where table_schema = '{schema}' and table_name = '{table}'
     )
     select
       cols.table_schema as schema_name,
       cols.table_name as table_name,
-      tables.table_type as table_type,
       cols.column_name as column_name,
-      cols.data_type as column_type,
-      cols.ordinal_position as column_id,
-      null::int num_distinct,
-      null::int num_nulls,
-      null::int num_rows,
-      null::int prct_distinct,
-      null::int prct_nulls,
-      null::date last_analyzed
+      cols.data_type as data_type,
+      cols.ordinal_position as position
     from information_schema.columns cols
     join tables
       on tables.table_catalog = cols.table_catalog
       and tables.table_schema = cols.table_schema
       and tables.table_name = cols.table_name
-      order by cols.table_catalog, cols.table_schema, cols.table_name, cols.ordinal_position
+    order by cols.table_catalog, cols.table_schema, cols.table_name, cols.ordinal_position
+
+  schemata: |
+    with tables as (
+      select
+        table_catalog,
+        table_schema,
+        table_name,
+        case table_type
+          when 'VIEW' then true
+          else false
+        end as is_view
+      from information_schema.tables
+      where table_schema = '{schema}'
+    )
+    select
+      cols.table_schema as schema_name,
+      cols.table_name as table_name,
+      tables.is_view as is_view,
+      cols.column_name as column_name,
+      cols.data_type as data_type,
+      cols.ordinal_position as position
+    from information_schema.columns cols
+    join tables
+      on tables.table_catalog = cols.table_catalog
+      and tables.table_schema = cols.table_schema
+      and tables.table_name = cols.table_name
+    order by cols.table_catalog, cols.table_schema, cols.table_name, cols.ordinal_position
+  
+  ddl: "
+    with tabledefinition as (
+      SELECT 
+        n.nspname, c.relname, a.attname AS column_name,
+        pg_catalog.format_type(a.atttypid, a.atttypmod) as type,
+        case 
+          when a.attnotnull
+        then 'NOT NULL' 
+        else 'NULL' 
+        END as not_null 
+      FROM pg_class c,
+      pg_attribute a,
+      pg_type t,
+      pg_namespace n
+      WHERE  n.nspname = '{schema}' and c.relname = '{table}'
+      AND a.attnum > 0
+      AND a.attrelid = c.oid
+      AND a.atttypid = t.oid
+      and  n.oid = c.relnamespace
+    ORDER BY a.attnum
+    )
+    , table_ddl as (
+        SELECT                                          
+          'CREATE TABLE ' || nspname || '.' || relname || E'\n(\n' ||
+          array_to_string(
+            array_agg(
+              '    \"' || column_name || '\" ' ||  type || ' '|| not_null
+            )
+            , E',\n'
+          ) || E'\n)' as ddl
+        from tabledefinition
+        group by nspname, relname
+    )
+    , view_ddl as (
+      SELECT pg_get_viewdef(
+    to_regclass('{schema}.{table}'))::text as ddl
+    )
+    select
+      case when view_ddl.ddl is null or view_ddl.ddl = 'Not a view'
+      then table_ddl.ddl
+      else view_ddl.ddl
+      end as ddl
+    from view_ddl, table_ddl
+    "
 
 analysis:
   field_chars: |
@@ -95,7 +200,6 @@ analysis:
       '{schema}' as schema_nm,
       '{table}' as table_nm,
       '{field}' as field,
-      '{type}' as type,
       count(*) as tot_cnt,
       count({field}) as f_cnt,
       count(*) - count({field}) as f_null_cnt,
@@ -201,83 +305,31 @@ function:
 
 # native to general
 native_type_map:
-  16: "integer"
-  # 17:'_bytea'
-  # 18:'name'
-  18: "string"
-  # 19:'_name'
-  20: "integer"
-  # 21:'int2vector'
-  21: "integer"
-  # 22:'_int2vector'
-  23: "integer"
-  # 24:'_regproc'
-  25: "string"
-  # 26:'oidvector'
-  # 26:'_oid'
-  # 27:'_tid'
-  # 28:'_xid'
-  # 29:'_cid'
-  # 30:'_oidvector'
-  114: "string"
-  142: "string"
-  # 600:'lseg'
-  # 600:'_point'
-  # 600:'box'
-  # 601:'_lseg'
-  # 602:'_path'
-  # 603:'_box'
-  # 604:'_polygon'
-  # 628:'_line'
-  # 650:'_cidr'
-  700: "float"
-  # 701:'point'
-  701: "double"
-  # 701:'line'
-  # 702:'_abstime'
-  # 703:'_reltime'
-  # 704:'_tinterval'
-  # 718:'_circle'
-  790: "number"
-  # 829:'_macaddr'
-  # 869:'_inet'
-  # 1033:'_aclitem'
-  1042: "string"
-  1043: "string"
-  1082: "datetime"
-  1083: "datetime"
-  1114: "datetime"
-  1184: "datetime"
-  # 1186:'_interval'
-  # 1266:'_timetz'
-  # 1560:'_bit'
-  # 1562:'_varbit'
-  1700: "number"
-  # 1790:'_refcursor'
-  # 2202:'_regprocedure'
-  # 2203:'_regoper'
-  # 2204:'_regoperator'
-  # 2205:'_regclass'
-  # 2206:'_regtype'
-  # 2249:'_record'
-  2275: "string"
-  2950: "string"
-  # 2970:'_txid_snapshot'
-  # 3220:'_pg_lsn'
-  # 3614:'_tsvector'
-  # 3615:'_tsquery'
-  # 3642:'_gtsvector'
-  # 3734:'_regconfig'
-  # 3769:'_regdictionary'
-  3802: "string"
+  int2: "integer"
+  int4: "integer"
+  int8: "integer"
   number: "integer"
+  serial2: "integer"
+  serial4: "integer"
+  serial8: "integer"
+  float4: "decimal"
+  float8: "decimal"
   numeric: "decimal"
   text: "string"
+  json: "string"
+  jsonb: "string"
+  varbit: "string"
+  name: "string"
+  char: "string"
   varchar: "string"
   varchar2: "string"
+  date: "datetime"
   datetime: "datetime"
   timestamp: "datetime"
   timestamp with time zone: "datetime"
+  timestamptz: "datetime"
+  timetz: "time"
+  bool: "bool"
 
 # general to native
 general_type_map:
@@ -288,3 +340,4 @@ general_type_map:
   datetime: "timestamp"
   timestamp: "timestamp"
   text: "text"
+  bool: "bool"
