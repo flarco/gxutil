@@ -21,6 +21,7 @@ type Datastream struct {
 	Rows    chan []interface{}
 	Buffer  [][]interface{}
 	count   uint64
+	closed  bool
 }
 
 // Dataset is a query returned dataset
@@ -131,7 +132,6 @@ func (ds *Datastream) Collect() Dataset {
 	return data
 }
 
-
 // InferTypes infers types if needed and add to Buffer
 // Experimental....
 func (ds *Datastream) InferTypes() {
@@ -153,7 +153,7 @@ func (ds *Datastream) InferTypes() {
 		if c == 1000 {
 			data := Dataset{
 				Columns: ds.Columns,
-				Rows: ds.Buffer,
+				Rows:    ds.Buffer,
 			}
 			data.InferColumnTypes()
 			ds.Columns = data.Columns
@@ -333,12 +333,13 @@ func (data *Dataset) InferColumnTypes() {
 	data.Columns = columns
 }
 
-// NewCsvReader creates a Reader
-func (ds *Datastream) NewCsvReader() *io.PipeReader {
+// NewCsvReader creates a Reader with limit. If limit == 0, then read all rows.
+func (ds *Datastream) NewCsvReader(limit int) *io.PipeReader {
 	pipeR, pipeW := io.Pipe()
 	ds.count = 0
 
 	go func() {
+		c := uint64(0) // local counter
 		w := csv.NewWriter(pipeW)
 
 		err := w.Write(ds.GetFields())
@@ -348,6 +349,7 @@ func (ds *Datastream) NewCsvReader() *io.PipeReader {
 		}
 
 		for row0 := range ds.Rows {
+			c++
 			ds.count++
 			// convert to csv string
 			row := make([]string, len(row0))
@@ -360,7 +362,16 @@ func (ds *Datastream) NewCsvReader() *io.PipeReader {
 				break
 			}
 			w.Flush()
+
+			if c > uint64(limit) {
+				break // close reader if row limit is reached
+			}
 		}
+
+		if c <= uint64(limit) {
+			ds.closed = true
+		}
+
 		pipeW.Close()
 	}()
 

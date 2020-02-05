@@ -52,13 +52,14 @@ func isRedshift(URL string) (isRs bool) {
 func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count uint64, err error) {
 
 	s3 := S3{
-		Bucket: conn.properties["s3Bucket"],
+		Bucket: conn.GetProp("s3Bucket"),
 		Region: "us-east-1",
 	}
 
 	s3Path := F("sling/%s.csv", tableFName)
 	AwsID := os.Getenv("AWS_ACCESS_KEY_ID")
 	AwsAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+	fileRowLimit := 100000
 
 	if s3.Bucket == "" {
 		LogErrorExit(errors.New("Need to set 's3Bucket' to copy to redshift"))
@@ -68,16 +69,23 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 		LogErrorExit(errors.New("Need to set env vars 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' to copy to redshift"))
 	}
 
-	s3Path = s3Path + ".gz"
-	err = s3.Delete(s3Path)
-	LogErrorExit(err)
+	fileCount := 0
+	for {
+		fileCount++
+		s3PartPath := F("%s/%s.%03d.csv.gz", s3Path, tableFName, fileCount)
+		err = s3.Delete(s3PartPath)
+		LogErrorExit(err)
 
-	reader := ds.NewCsvReader()
-	gzReader := Compress(reader)
-	err = s3.WriteStream(s3Path, gzReader)
-	LogErrorExit(err)
+		reader := ds.NewCsvReader(fileRowLimit) // limit the rows so we can split the files
+		gzReader := Compress(reader)
+		err = s3.WriteStream(s3PartPath, gzReader)
+		LogErrorExit(err)
+		Log(F("uploaded to s3://%s/%s", s3.Bucket, s3PartPath))
 
-	Log(F("uploaded to s3://%s/%s", s3.Bucket, s3Path))
+		if ds.closed {
+			break
+		}
+	}
 
 	sql := R(`COPY {tgt_table}
 	FROM 's3://{s3_bucket}/{s3_path}'

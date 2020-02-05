@@ -15,6 +15,11 @@ core:
     from (select * from {temp_table}) as t2
     where {pk_fields_equal2}
   sample: SELECT {fields} FROM {table} TABLESAMPLE SYSTEM (50) limit {n}
+  copy_to: |
+    COPY {tgt_table}
+    FROM 's3://{s3_bucket}/{s3_path}'
+    credentials 'aws_access_key_id={aws_access_key_id};aws_secret_access_key={aws_secret_access_key}'
+    escape delimiter ',' EMPTYASNULL BLANKSASNULL GZIP IGNOREHEADER 1 REMOVEQUOTES
 
 metadata:
     
