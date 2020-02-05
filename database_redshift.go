@@ -59,7 +59,10 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 	s3Path := F("sling/%s.csv", tableFName)
 	AwsID := os.Getenv("AWS_ACCESS_KEY_ID")
 	AwsAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-	fileRowLimit := 100000
+	fileRowLimit := cast.ToInt(conn.GetProp("fileRowLimit"))
+	if fileRowLimit == 0 {
+		fileRowLimit = 500000
+	}
 
 	if s3.Bucket == "" {
 		LogErrorExit(errors.New("Need to set 's3Bucket' to copy to redshift"))
@@ -74,7 +77,7 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 	fileCount := 0
 	for {
 		fileCount++
-		s3PartPath := F("%s/%03d.csv.gz", s3Path, fileCount)
+		s3PartPath := F("%s/%04d.csv.gz", s3Path, fileCount)
 		LogErrorExit(err)
 
 		reader := ds.NewCsvReader(fileRowLimit) // limit the rows so we can split the files
@@ -91,9 +94,7 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 	sql := R(`COPY {tgt_table}
 	FROM 's3://{s3_bucket}/{s3_path}'
 	credentials 'aws_access_key_id={aws_access_key_id};aws_secret_access_key={aws_secret_access_key}'
-	escape delimiter ',' EMPTYASNULL BLANKSASNULL GZIP IGNOREHEADER 1 REMOVEQUOTES
-	-- TIMEFORMAT AS 'MM.DD.YYYY HH:MI:SS' DATEFORMAT AS 'MM.DD.YYYY'
-	`,
+	CSV delimiter ',' EMPTYASNULL BLANKSASNULL GZIP IGNOREHEADER 1 ACCEPTANYDATE`,
 		"tgt_table", tableFName,
 		"s3_bucket", s3.Bucket,
 		"s3_path", s3Path,
