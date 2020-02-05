@@ -77,7 +77,7 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 	fileCount := 0
 	for {
 		fileCount++
-		s3PartPath := F("%s/%04d.csv.gz", s3Path, fileCount)
+		s3PartPath := F("%s/%04d.gz", s3Path, fileCount)
 		LogErrorExit(err)
 
 		reader := ds.NewCsvReader(fileRowLimit) // limit the rows so we can split the files
