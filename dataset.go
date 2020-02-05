@@ -363,9 +363,13 @@ func (ds *Datastream) NewCsvReader(limit int) *io.PipeReader {
 			}
 			w.Flush()
 
-			if limit > 0 && c == uint64(limit) {
+			if limit > 0 && c >= uint64(limit) {
 				break // close reader if row limit is reached
 			}
+		}
+
+		if limit == 0 || c < uint64(limit) {
+			ds.closed = true
 		}
 
 		pipeW.Close()

@@ -414,7 +414,6 @@ func (conn *BaseConn) StreamRows(sql string) (ds Datastream, err error) {
 		}
 		// Ensure that at the end of the loop we close the channel!
 		close(ds.Rows)
-		ds.closed = true
 	}()
 
 	return ds, nil
