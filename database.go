@@ -367,8 +367,7 @@ func (conn *BaseConn) StreamRecords(sql string) (<-chan map[string]interface{}, 
 }
 
 // StreamRows the rows of a sql query, returns `result`, `error`
-func (conn *BaseConn) StreamRows(sql string) (Datastream, error) {
-	var ds Datastream
+func (conn *BaseConn) StreamRows(sql string) (ds Datastream, err error) {
 	start := time.Now()
 
 	if strings.TrimSpace(sql) == "" {
@@ -415,6 +414,7 @@ func (conn *BaseConn) StreamRows(sql string) (Datastream, error) {
 		}
 		// Ensure that at the end of the loop we close the channel!
 		close(ds.Rows)
+		ds.closed = true
 	}()
 
 	return ds, nil
