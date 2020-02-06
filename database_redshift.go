@@ -1,9 +1,12 @@
 package gxutil
 
 import (
+	"bytes"
 	"errors"
+	"io/ioutil"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cast"
@@ -49,7 +52,7 @@ func isRedshift(URL string) (isRs bool) {
 
 // InsertStream inserts a stream into a table.
 // For redshift we need to create CSVs in S3 and then use the COPY command.
-func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count uint64, err error) {
+func (conn *RedshiftConn) InsertStreamOld(tableFName string, ds Datastream) (count uint64, err error) {
 
 	s3 := S3{
 		Bucket: conn.GetProp("s3Bucket"),
@@ -87,6 +90,82 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 		Log(F("uploaded to s3://%s/%s", s3.Bucket, s3PartPath))
 
 		if ds.closed {
+			break
+		}
+	}
+
+	txn := conn.Db().MustBegin()
+
+	sql := R(
+		conn.template.Core["copy_to"],
+		"tgt_table", tableFName,
+		"s3_bucket", s3.Bucket,
+		"s3_path", s3Path,
+		"aws_access_key_id", AwsID,
+		"aws_secret_access_key", AwsAccessKey,
+	)
+	_, err = txn.Exec(sql)
+	LogErrorExit(err)
+
+	err = txn.Commit()
+	LogErrorExit(err)
+
+	return ds.count, nil
+}
+
+// InsertStream inserts a stream into a table.
+// For redshift we need to create CSVs in S3 and then use the COPY command.
+func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count uint64, err error) {
+	var wg sync.WaitGroup
+
+	s3 := S3{
+		Bucket: conn.GetProp("s3Bucket"),
+		Region: "us-east-1",
+	}
+
+	s3Path := F("sling/%s.csv", tableFName)
+	AwsID := os.Getenv("AWS_ACCESS_KEY_ID")
+	AwsAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+	fileRowLimit := cast.ToInt(conn.GetProp("fileRowLimit"))
+	if fileRowLimit == 0 {
+		fileRowLimit = 500000
+	}
+
+	if s3.Bucket == "" {
+		LogErrorExit(errors.New("Need to set 's3Bucket' to copy to redshift"))
+	}
+
+	if AwsID == "" || AwsAccessKey == "" {
+		LogErrorExit(errors.New("Need to set env vars 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' to copy to redshift"))
+	}
+
+	compressAndUpload := func(bytesData []byte, s3PartPath string, wg *sync.WaitGroup) {
+		defer wg.Done()
+		gzReader := Compress(bytes.NewReader(bytesData))
+		err := s3.WriteStream(s3PartPath, gzReader)
+		LogErrorExit(err)
+		Log(F("uploaded to s3://%s/%s", s3.Bucket, s3PartPath))
+	}
+
+	err = s3.Delete(s3Path)
+
+	fileCount := 0
+	for {
+		fileCount++
+		s3PartPath := F("%s/%04d.gz", s3Path, fileCount)
+		LogErrorExit(err)
+
+		reader := ds.NewCsvReader(fileRowLimit)
+		bytesData, err := ioutil.ReadAll(reader)
+		LogErrorExit(err)
+
+		// need to kick off threads to compres and upload
+		// separately to not slow query ingress.
+		wg.Add(1)
+		go compressAndUpload(bytesData, s3PartPath, &wg)
+
+		if ds.closed {
+			wg.Wait()
 			break
 		}
 	}
