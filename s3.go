@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-
 )
 
 // S3 is a AWS s3 object
@@ -116,4 +115,35 @@ func (s *S3) Delete(key string) error {
 	})
 
 	return err
+}
+
+// List S3 objects from a key/prefix
+func (s *S3) List(key string) (paths []string, err error) {
+	sess := session.Must(session.NewSession(&aws.Config{
+		Credentials:      credentials.NewEnvCredentials(),
+		Region:           aws.String(s.Region),
+		S3ForcePathStyle: aws.Bool(true),
+		// Endpoint:    aws.String(endpoint),
+		// LogLevel: aws.LogLevel(aws.LogDebugWithHTTPBody),
+	}))
+
+	// Create S3 service client
+	svc := s3.New(sess)
+
+	input := &s3.ListObjectsV2Input{
+		Bucket:  aws.String(s.Bucket),
+		Prefix:  aws.String(key),
+		MaxKeys: aws.Int64(1000000),
+	}
+
+	result, err := svc.ListObjectsV2(input)
+	if err != nil {
+		return paths, err
+	}
+
+	for _, obj := range result.Contents {
+		paths = append(paths, obj.String())
+	}
+
+	return paths, err
 }
