@@ -27,6 +27,7 @@ type Connection interface {
 	GetGormConn() (*gorm.DB, error)
 	LoadYAML() error
 	StreamRows(sql string) (Datastream, error)
+	BulkStream(sql string) (Datastream, error)
 	Query(sql string) (Dataset, error)
 	GenerateDDL(tableFName string, data Dataset) (string, error)
 	GetDDL(string) (string, error)
@@ -369,6 +370,12 @@ func (conn *BaseConn) StreamRecords(sql string) (<-chan map[string]interface{}, 
 	}()
 
 	return chnl, nil
+}
+
+// BulkStream streams the rows in bulk
+func (conn *BaseConn) BulkStream(sql string) (ds Datastream, err error) {
+	Log("BulkStream not implemented for " + conn.Type)
+	return conn.StreamRows(sql)
 }
 
 // StreamRows the rows of a sql query, returns `result`, `error`

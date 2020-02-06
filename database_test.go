@@ -2,9 +2,9 @@ package gxutil
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
-	"strings"
 
 	"github.com/stretchr/testify/assert"
 	// "github.com/gobuffalo/packr"
@@ -67,7 +67,8 @@ func TestPG(t *testing.T) {
 	tx.MustExec("INSERT INTO place (country, city, telcode) VALUES ($1, $2, $3)", "United States", "New York", "1")
 	tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Hong Kong", "852")
 	tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Singapore", "65")
-	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2019-10-10", "test product", "65.657")
+	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2019-10-10", "test\" \nproduct", "65.657")
+	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2020-10-10", "new \nproduct", "5.657")
 	tx.Commit()
 
 	// Test Streaming
@@ -99,7 +100,7 @@ func TestPG(t *testing.T) {
 
 	data, err = conn.Query(`select * from transactions`)
 	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 1)
+	assert.Len(t, data.Rows, 2)
 	assert.Equal(t, 65.657, data.Records()[0]["amount"])
 
 	// GetSchemas
@@ -239,7 +240,7 @@ func TestSQLite(t *testing.T) {
 	select * from place
 	where telcode = 65
 	`
-	conn := GetConn("file:"+SQLiteURL)
+	conn := GetConn("file:" + SQLiteURL)
 	err = conn.Connect()
 	assert.NoError(t, err)
 
@@ -261,7 +262,8 @@ func TestSQLite(t *testing.T) {
 	tx.MustExec("INSERT INTO place (country, city, telcode) VALUES ($1, $2, $3)", "United States", "New York", "1")
 	tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Hong Kong", "852")
 	tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Singapore", "65")
-	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2019-10-10", "test product", "65.657")
+	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2019-10-10", "test\" \nproduct", "65.657")
+	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2020-10-10", "new \nproduct", "5.657")
 	tx.Commit()
 
 	data, err := conn.Query(`select * from person`)
@@ -274,7 +276,7 @@ func TestSQLite(t *testing.T) {
 
 	data, err = conn.Query(`select * from transactions`)
 	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 1)
+	assert.Len(t, data.Rows, 2)
 	assert.Equal(t, 65.657, data.Records()[0]["amount"])
 
 	// GetSchemas
@@ -389,8 +391,6 @@ func TestSQLite(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-
-
 func PGtoPGTest(t *testing.T, srcTable string) {
 	tgtTable := srcTable + "2"
 
@@ -420,6 +420,26 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 	if err == nil {
 		_, err = tgtConn.InsertStream(tgtTable, stream)
 		assert.NoError(t, err)
+
+		data, err := tgtConn.RunAnalysisTable("table_count", srcTable, tgtTable)
+		assert.NoError(t, err)
+		assert.Equal(t, data.Records()[0]["cnt"], data.Records()[1]["cnt"])
+	}
+
+	// use Copy TO
+	_, err = tgtConn.Query("truncate table " + tgtTable)
+	assert.NoError(t, err)
+
+	stream, err = srcConn.BulkStream(`select * from ` + srcTable)
+	assert.NoError(t, err)
+
+	if err == nil {
+		_, err = tgtConn.InsertStream(tgtTable, stream)
+		assert.NoError(t, err)
+
+		data, err := tgtConn.RunAnalysisTable("table_count", srcTable, tgtTable)
+		assert.NoError(t, err)
+		assert.Equal(t, data.Records()[0]["cnt"], data.Records()[1]["cnt"])
 	}
 
 	err = tgtConn.DropTable(tgtTable)

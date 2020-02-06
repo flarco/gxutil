@@ -1,6 +1,7 @@
 package gxutil
 
 import (
+	"bufio"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -74,9 +75,9 @@ func R(format string, args ...string) string {
 func Rm(format string, m map[string]interface{}) string {
 	args, i := make([]string, len(m)*2), 0
 	for k, v := range m {
-			args[i] = "{" + k + "}"
-			args[i+1] = fmt.Sprint(v)
-			i += 2
+		args[i] = "{" + k + "}"
+		args[i+1] = fmt.Sprint(v)
+		i += 2
 	}
 	return strings.NewReplacer(args...).Replace(format)
 }
@@ -256,4 +257,22 @@ func Panic(e error, msg string) {
 // Error returns stacktrace error with message
 func Error(e error, msg string) error {
 	return stacktrace.Propagate(e, msg, 3)
+}
+
+// Tee prints stream of text of reader
+func Tee(reader io.Reader) io.Reader {
+	pipeR, pipeW := io.Pipe()
+
+	go func() {
+		scanner := bufio.NewScanner(reader)
+		for scanner.Scan() {
+			bytes := scanner.Bytes()
+			nl := []byte("\n")
+			fmt.Println(string(bytes))
+			pipeW.Write(append(bytes, nl...))
+		}
+		pipeW.Close()
+	}()
+
+	return pipeR
 }

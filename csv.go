@@ -1,20 +1,22 @@
 package gxutil
 
 import (
-	"github.com/spf13/cast"
 	"encoding/csv"
+	"fmt"
 	"io"
 	"os"
 	"time"
-	"fmt"
+
+	"github.com/spf13/cast"
 )
 
 // CSV is a csv object
 type CSV struct {
-	Path string
+	Path    string
 	Columns []Column
-	File *os.File
-	Data *Dataset
+	File    *os.File
+	Data    *Dataset
+	Reader  io.Reader
 }
 
 // ReadCsv reads CSV and returns dataset
@@ -47,6 +49,7 @@ func ReadCsvStream(path string) (Datastream, error) {
 
 	return csv1.ReadStream()
 }
+
 // InferSchema returns a sample of n rows
 func (c *CSV) InferSchema() error {
 	data, err := c.Sample(1000)
@@ -122,8 +125,9 @@ func castVal(val interface{}, typ string) interface{} {
 // ReadStream returns the read CSV stream with Line 1 as header
 func (c *CSV) ReadStream() (Datastream, error) {
 	var ds Datastream
+	var r *csv.Reader
 
-	if c.File == nil {
+	if c.File == nil && c.Reader == nil {
 		file, err := os.Open(c.Path)
 		if err != nil {
 			return ds, err
@@ -131,7 +135,12 @@ func (c *CSV) ReadStream() (Datastream, error) {
 		c.File = file
 	}
 
-	r := csv.NewReader(c.File)
+	if c.Reader == nil {
+		r = csv.NewReader(c.File)
+	} else {
+		r = csv.NewReader(c.Reader)
+	}
+
 	row0, err := r.Read()
 	if err != nil {
 		return ds, err
@@ -140,7 +149,7 @@ func (c *CSV) ReadStream() (Datastream, error) {
 	}
 
 	ds = Datastream{
-		Rows: make(chan []interface{}),
+		Rows:    make(chan []interface{}),
 		Columns: c.Columns,
 	}
 
@@ -243,8 +252,6 @@ func (c *CSV) WriteStream(ds Datastream) (cnt uint64, err error) {
 	}
 	return cnt, nil
 }
-
-
 
 // NewReader creates a Reader
 func (c *CSV) NewReader() (*io.PipeReader, error) {
