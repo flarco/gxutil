@@ -4,16 +4,17 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"path"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/gobuffalo/packr"
 	"github.com/jinzhu/gorm"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"github.com/markbates/pkger"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/cast"
 	"gopkg.in/yaml.v2"
@@ -204,9 +205,13 @@ func (conn *BaseConn) LoadYAML() error {
 	}
 
 	_, filename, _, _ := runtime.Caller(1)
-	box := packr.NewBox(path.Join(path.Dir(filename), "templates"))
+	pkgerRead := func(name string) (TemplateBytes []byte, err error) {
+		TemplateFile, err := pkger.Open(path.Join(path.Dir(filename), "templates", name))
+		TemplateBytes, err = ioutil.ReadAll(TemplateFile)
+		return TemplateBytes, err
+	}
 
-	baseTemplateBytes, err := box.FindString("base.yaml")
+	baseTemplateBytes, err := pkgerRead("base.yaml")
 	if err != nil {
 		return Error(err, "box.FindString('base.yaml')")
 	}
@@ -215,7 +220,7 @@ func (conn *BaseConn) LoadYAML() error {
 		return Error(err, "yaml.Unmarshal")
 	}
 
-	templateBytes, err := box.FindString(conn.Type + ".yaml")
+	templateBytes, err := pkgerRead(conn.Type + ".yaml")
 	if err != nil {
 		return Error(err, "box.FindString('.yaml') for "+conn.Type)
 	}
