@@ -6,12 +6,11 @@ require (
 	cloud.google.com/go v0.47.0 // indirect
 	cloud.google.com/go/bigquery v1.1.0 // indirect
 	cloud.google.com/go/storage v1.1.2 // indirect
-	github.com/DataDog/zstd v1.4.4 // indirect
 	github.com/alecthomas/colour v0.1.0 // indirect
 	github.com/alecthomas/kong v0.2.1 // indirect
 	github.com/alecthomas/kong-hcl v0.2.0 // indirect
 	github.com/apache/thrift v0.13.0 // indirect
-	github.com/aws/aws-sdk-go v1.25.36
+	github.com/aws/aws-sdk-go v1.28.12
 	github.com/coreos/bbolt v1.3.3 // indirect
 	github.com/coreos/etcd v3.3.17+incompatible // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
@@ -19,7 +18,7 @@ require (
 	github.com/couchbase/go-couchbase v0.0.0-20191115234221-3a15f99bd1f1 // indirect
 	github.com/creack/pty v1.1.9 // indirect
 	github.com/daaku/go.zipexe v1.0.1 // indirect
-	github.com/fatih/color v1.7.0
+	github.com/fatih/color v1.9.0
 	github.com/flarco/stacktrace v0.0.0-20190606122717-05f59122ae1a
 	github.com/frankban/quicktest v1.6.0 // indirect
 	github.com/gobuffalo/envy v1.9.0 // indirect
@@ -36,19 +35,21 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.11.3 // indirect
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
-	github.com/jinzhu/gorm v1.9.11
+	github.com/jinzhu/gorm v1.9.12
 	github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/jstemmer/go-junit-report v0.9.1 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
+	github.com/klauspost/compress v1.9.8 // indirect
 	github.com/kr/pty v1.1.8 // indirect
-	github.com/lib/pq v1.2.0
+	github.com/lib/pq v1.3.0
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/markbates/pkger v0.14.0
-	github.com/mattn/go-colorable v0.1.4 // indirect
-	github.com/mattn/go-sqlite3 v1.12.0
+	github.com/mattn/go-isatty v0.0.12 // indirect
+	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/nkovacs/streamquote v1.0.0 // indirect
+	github.com/openzipkin/zipkin-go v0.1.6 // indirect
 	github.com/palantir/stacktrace v0.0.0-20161112013806-78658fd2d177 // indirect
 	github.com/pelletier/go-toml v1.6.0 // indirect
 	github.com/pierrec/lz4 v2.3.0+incompatible // indirect
@@ -57,7 +58,7 @@ require (
 	github.com/rogpeppe/go-internal v1.5.2 // indirect
 	github.com/russross/blackfriday v2.0.0+incompatible // indirect
 	github.com/spf13/afero v1.2.2 // indirect
-	github.com/spf13/cast v1.3.0
+	github.com/spf13/cast v1.3.1
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.4.0 // indirect
@@ -65,7 +66,7 @@ require (
 	github.com/stretchr/testify v1.4.0
 	github.com/ugorji/go v1.1.7 // indirect
 	github.com/valyala/fasttemplate v1.1.0 // indirect
-	github.com/xitongsys/parquet-go v1.4.0
+	github.com/xitongsys/parquet-go v1.5.0
 	github.com/xitongsys/parquet-go-source v0.0.0-20191104003508-ecfa341356a6
 	github.com/xo/dburl v0.0.0-20191116074001-eeed741d1a6d // indirect
 	github.com/xo/usql v0.7.7 // indirect
@@ -82,7 +83,8 @@ require (
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	golang.org/x/tools v0.0.0-20200206050830-dd0d5d485177 // indirect
 	google.golang.org/grpc v1.24.0 // indirect
+	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
-	gopkg.in/yaml.v2 v2.2.7
+	gopkg.in/yaml.v2 v2.2.8
 )

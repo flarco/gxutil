@@ -26,8 +26,11 @@ func TestS3(t *testing.T) {
 		Region: s3Region,
 	}
 
-	err := s3.Delete("test/")
+	err := s3.Delete("test")
 	assert.NoError(t, err)
+	// if err != nil {
+	// 	return
+	// }
 
 	csvFile, err := os.Open(csvPath)
 	assert.NoError(t, err)
@@ -55,7 +58,6 @@ func TestS3(t *testing.T) {
 	assert.Equal(t, string(csvReaderOut), string(s3ReaderOut))
 
 	paths, err := s3.List("test/")
-	PrintV(paths)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(paths))
 

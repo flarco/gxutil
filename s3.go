@@ -88,11 +88,11 @@ func (s *S3) ReadStream(key string) (*io.PipeReader, error) {
 }
 
 // Delete deletes an s3 object at provided key
-func (s *S3) Delete(key string) error {
+func (s *S3) Delete(key string) (err error) {
 	sess := session.Must(session.NewSession(&aws.Config{
-		Credentials:      credentials.NewEnvCredentials(),
-		Region:           aws.String(s.Region),
-		S3ForcePathStyle: aws.Bool(true),
+		Credentials:                    credentials.NewEnvCredentials(),
+		Region:                         aws.String(s.Region),
+		S3ForcePathStyle:               aws.Bool(true),
 		DisableRestProtocolURICleaning: aws.Bool(true),
 		// Endpoint:    aws.String(endpoint),
 		// LogLevel: aws.LogLevel(aws.LogDebugWithHTTPBody),
@@ -101,9 +101,22 @@ func (s *S3) Delete(key string) error {
 	// Create S3 service client
 	svc := s3.New(sess)
 
-	_, err := svc.DeleteObject(&s3.DeleteObjectInput{
+	paths, err := s.List(key)
+	if err != nil {
+		return
+	}
+
+	objects := []*s3.ObjectIdentifier{}
+	for _, path := range paths {
+		objects = append(objects, &s3.ObjectIdentifier{Key: aws.String(path)})
+	}
+
+	_, err = svc.DeleteObjects(&s3.DeleteObjectsInput{
 		Bucket: aws.String(s.Bucket),
-		Key:    aws.String(key),
+		Delete: &s3.Delete{
+			Objects: objects,
+			Quiet:   aws.Bool(true),
+		},
 	})
 
 	if err != nil {
@@ -134,7 +147,7 @@ func (s *S3) List(key string) (paths []string, err error) {
 	input := &s3.ListObjectsV2Input{
 		Bucket:  aws.String(s.Bucket),
 		Prefix:  aws.String(key),
-		MaxKeys: aws.Int64(1000000),
+		MaxKeys: aws.Int64(100000),
 	}
 
 	result, err := svc.ListObjectsV2(input)
@@ -143,7 +156,8 @@ func (s *S3) List(key string) (paths []string, err error) {
 	}
 
 	for _, obj := range result.Contents {
-		paths = append(paths, F(`s3://%s/%s`, s.Bucket, *obj.Key))
+		// paths = append(paths, F(`s3://%s/%s`, s.Bucket, *obj.Key))
+		paths = append(paths, *obj.Key)
 	}
 
 	return paths, err
