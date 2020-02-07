@@ -109,8 +109,10 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 				workers++
 				break
 			}
-			time.Sleep(100)
+			time.Sleep(100 * time.Millisecond)
 		}
+
+		Log("Reading " + s3PartPath)
 
 		gzReader, err := s3.ReadStream(s3PartPath)
 		LogErrorExit(err)
