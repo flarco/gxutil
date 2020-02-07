@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -192,5 +193,6 @@ func (s *S3) List(key string) (paths []string, err error) {
 		paths = append(paths, *obj.Key)
 	}
 
+	sort.Strings(paths)
 	return paths, err
 }
