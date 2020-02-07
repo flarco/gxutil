@@ -260,12 +260,17 @@ func Error(e error, msg string) error {
 }
 
 // Tee prints stream of text of reader
-func Tee(reader io.Reader) io.Reader {
+func Tee(reader io.Reader, limit int) io.Reader {
 	pipeR, pipeW := io.Pipe()
 
+	cnt := 0
 	go func() {
 		scanner := bufio.NewScanner(reader)
 		for scanner.Scan() {
+			cnt++
+			if cnt > limit {
+				break
+			}
 			bytes := scanner.Bytes()
 			nl := []byte("\n")
 			fmt.Println(string(bytes))
