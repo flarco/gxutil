@@ -102,7 +102,7 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 		Rows: make(chan []interface{}),
 	}
 
-	decompressAndStream := func(s3PartPath string) {
+	decompressAndStream := func(s3PartPath string, dsMain *Datastream) {
 		// limit concurent workers
 		for {
 			if workers < maxWorkers {
@@ -125,13 +125,13 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 		csvPart := CSV{Reader: reader}
 		dsPart, err := csvPart.ReadStream()
 
-		if ds.Columns == nil {
-			ds.Columns = dsPart.Columns
+		if dsMain.Columns == nil {
+			dsMain.Columns = dsPart.Columns
 		}
 
 		// foward to channel, rows will came in disorder
 		for row := range dsPart.Rows {
-			ds.Rows <- row
+			dsMain.Rows <- row
 		}
 		workers--
 		done++
@@ -145,7 +145,7 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 	for _, s3PartPath := range s3PartPaths {
 		// need to read them and decompress them
 		// then append to datastream
-		go decompressAndStream(s3PartPath)
+		go decompressAndStream(s3PartPath, &ds)
 	}
 
 	// loop until columns are parsed
@@ -153,6 +153,7 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 		if ds.Columns != nil {
 			break
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	return ds, err
