@@ -93,6 +93,7 @@ func (s *S3) Delete(key string) error {
 		Credentials:      credentials.NewEnvCredentials(),
 		Region:           aws.String(s.Region),
 		S3ForcePathStyle: aws.Bool(true),
+		DisableRestProtocolURICleaning: aws.Bool(true),
 		// Endpoint:    aws.String(endpoint),
 		// LogLevel: aws.LogLevel(aws.LogDebugWithHTTPBody),
 	}))
@@ -142,7 +143,7 @@ func (s *S3) List(key string) (paths []string, err error) {
 	}
 
 	for _, obj := range result.Contents {
-		paths = append(paths, obj.String())
+		paths = append(paths, F(`s3://%s/%s`, s.Bucket, *obj.Key))
 	}
 
 	return paths, err
