@@ -3,8 +3,10 @@ package gxutil
 import (
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -20,6 +22,8 @@ type S3 struct {
 // WriteStream  write to an S3 bucket (upload)
 // Example: Database or CSV stream into S3 file
 func (s *S3) WriteStream(key string, reader io.Reader) error {
+	s.GetRegion()
+
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/s3/
 	// The session the S3 Uploader will use
 	sess := session.Must(session.NewSession(&aws.Config{
@@ -56,6 +60,8 @@ func (fw fakeWriterAt) WriteAt(p []byte, offset int64) (n int, err error) {
 // ReadStream read from an S3 bucket (download)
 // Example: S3 file stream into Database or CSV
 func (s *S3) ReadStream(key string) (*io.PipeReader, error) {
+	s.GetRegion()
+
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/s3/
 	// The session the S3 Downloader will use
 	sess := session.Must(session.NewSession(&aws.Config{
@@ -87,8 +93,33 @@ func (s *S3) ReadStream(key string) (*io.PipeReader, error) {
 	return pipeR, nil
 }
 
+// GetRegion determines the region of the bucket
+func (s *S3) GetRegion() (region string) {
+
+	if s.Region != "" {
+		return s.Region
+	}
+
+	sess := session.Must(session.NewSession(&aws.Config{
+		Credentials:                    credentials.NewEnvCredentials(),
+		S3ForcePathStyle:               aws.Bool(true),
+		DisableRestProtocolURICleaning: aws.Bool(true),
+	}))
+	region, err := s3manager.GetBucketRegion(aws.BackgroundContext(), sess, s.Bucket, "us-east-1")
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
+			fmt.Fprintf(os.Stderr, "unable to find bucket %s's region not found\n", s.Bucket)
+		}
+		LogError(err)
+	}
+
+	s.Region = region
+	return region
+}
+
 // Delete deletes an s3 object at provided key
 func (s *S3) Delete(key string) (err error) {
+	s.GetRegion()
 	sess := session.Must(session.NewSession(&aws.Config{
 		Credentials:                    credentials.NewEnvCredentials(),
 		Region:                         aws.String(s.Region),
@@ -133,6 +164,7 @@ func (s *S3) Delete(key string) (err error) {
 
 // List S3 objects from a key/prefix
 func (s *S3) List(key string) (paths []string, err error) {
+	s.GetRegion()
 	sess := session.Must(session.NewSession(&aws.Config{
 		Credentials:      credentials.NewEnvCredentials(),
 		Region:           aws.String(s.Region),

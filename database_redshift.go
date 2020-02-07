@@ -81,13 +81,12 @@ func (conn *RedshiftConn) unload(sql string) (s3Path string, err error) {
 // BulkStream reads in bulk
 func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 
-	maxWorkers := 3
+	maxWorkers := 5
 	workers := 0
 	done := 0
 
 	s3 := S3{
 		Bucket: conn.GetProp("s3Bucket"),
-		Region: "us-east-1",
 	}
 
 	s3Path, err := conn.unload(sql)
@@ -152,7 +151,6 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 
 	s3 := S3{
 		Bucket: conn.GetProp("s3Bucket"),
-		Region: "us-east-1",
 	}
 
 	s3Path := F("sling/%s.csv", tableFName)

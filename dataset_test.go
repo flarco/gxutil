@@ -10,7 +10,6 @@ import (
 
 var (
 	s3Bucket = os.Getenv("S3_BUCKET")
-	s3Region = os.Getenv("S3_REGION")
 )
 
 func TestS3(t *testing.T) {
@@ -21,10 +20,7 @@ func TestS3(t *testing.T) {
 
 	csv1 := CSV{Path: csvPath}
 
-	s3 := S3{
-		Bucket: s3Bucket,
-		Region: s3Region,
-	}
+	s3 := S3{Bucket: s3Bucket}
 
 	err := s3.Delete("test")
 	assert.NoError(t, err)
