@@ -74,6 +74,7 @@ func (conn *RedshiftConn) unload(sql string) (s3Path string, err error) {
 		"aws_secret_access_key", AwsAccessKey,
 	)
 	_, err = txn.Exec(unloadSQL)
+	Log(F("Unloaded to s3://%s/%s", s3.Bucket, s3Path))
 
 	return s3Path, err
 }
