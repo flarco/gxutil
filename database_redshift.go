@@ -124,7 +124,6 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 
 		csvPart := CSV{Reader: reader}
 		dsPart, err := csvPart.ReadStream()
-		PrintV(dsPart.Columns)
 
 		if ds.Columns == nil {
 			ds.Columns = dsPart.Columns
@@ -147,6 +146,13 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 		// need to read them and decompress them
 		// then append to datastream
 		go decompressAndStream(s3PartPath)
+	}
+
+	// loop until columns are parsed
+	for {
+		if ds.Columns != nil {
+			break
+		}
 	}
 
 	return ds, err
