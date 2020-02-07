@@ -65,6 +65,8 @@ func (conn *RedshiftConn) unload(sql string) (s3Path string, err error) {
 	txn := conn.Db().MustBegin()
 
 	sql = strings.ReplaceAll(strings.ReplaceAll(sql, "\n", " "), "'", "''")
+
+	s3.Delete(s3Path)
 	unloadSQL := R(
 		conn.template.Core["unload"],
 		"sql", sql,
