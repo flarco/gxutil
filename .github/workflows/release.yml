@@ -23,18 +23,16 @@ jobs:
         mkdir -p $TMPDIR
         go get github.com/markbates/pkger/cmd/pkger
 
-        cd cmd/sling
-        pkger -include gxutil:/templates
-        cd -
+        pkger -include github.com/flarco/gxutil:/templates -o cmd/sling
         
         echo "Building sling-linux"
         GOOS=linux GOARCH=amd64 go build -o sling-linux cmd/sling/*.go
 
         # echo "Building sling-mac"
-        # GOOS=darwin GOARCH=amd64 packr build -o sling-mac cmd/sling/*.go
+        # GOOS=darwin GOARCH=amd64 go build -o sling-mac cmd/sling/*.go
 
         # echo "Building sling-win.exe"
-        # GOOS=windows GOARCH=386 packr build -o sling-win.exe cmd/sling/*.go
+        # GOOS=windows GOARCH=386 go build -o sling-win.exe cmd/sling/*.go
 
 
     - uses: "marvinpinto/action-automatic-releases@latest"
