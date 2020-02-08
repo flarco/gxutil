@@ -24,7 +24,7 @@ jobs:
         go get github.com/markbates/pkger/cmd/pkger
 
         cd cmd/sling
-        pkger -include github.com/flarco/gxutil:/templates
+        pkger -include gxutil:/templates
         cd -
         
         echo "Building sling-linux"
