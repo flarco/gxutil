@@ -101,7 +101,6 @@ func Init() {
 
 	// Set the version and parse all inputs into variables.
 	flaggy.SetVersion(version)
-	g.PrintV(version)
 	flaggy.Parse()
 
 	InToDB := (cfg.in && cfg.tgtDB != "")
