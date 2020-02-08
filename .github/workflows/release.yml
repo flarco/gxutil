@@ -1,0 +1,45 @@
+name: Build & Release
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+
+    - name: Set up GoLang
+      uses: actions/setup-go@v1
+      with:
+        go-version: '1.13.1'
+  
+    - name: Build Sling
+      run: |
+        export GO_BIN_FOLDER=$HOME/go/bin
+        export TMPDIR=~/tmp/
+        export PATH=$GO_BIN_FOLDER:$PATH
+        mkdir -p $TMPDIR
+        go get github.com/markbates/pkger/cmd/pkger
+
+        pkger -include github.com/flarco/gxutil:/templates
+        
+        echo "Building sling-linux"
+        GOOS=linux GOARCH=amd64 go build -o sling-linux cmd/sling/*.go
+
+        # echo "Building sling-mac"
+        # GOOS=darwin GOARCH=amd64 packr build -o sling-mac cmd/sling/*.go
+
+        # echo "Building sling-win.exe"
+        # GOOS=windows GOARCH=386 packr build -o sling-win.exe cmd/sling/*.go
+
+
+    - uses: "marvinpinto/action-automatic-releases@latest"
+      with:
+        repo_token: "${{ secrets.GITHUB_TOKEN }}"
+        automatic_release_tag: "latest"
+        prerelease: true
+        title: "Development Build"
+        files: |
+          sling-*
