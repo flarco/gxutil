@@ -23,7 +23,7 @@ jobs:
         mkdir -p $TMPDIR
         go get github.com/markbates/pkger/cmd/pkger
 
-        pkger -include /templates
+        # pkger -include /templates
         
         echo "Building sling-linux"
         GOOS=linux GOARCH=amd64 go build -o sling-linux cmd/sling/*.go
