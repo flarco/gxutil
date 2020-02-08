@@ -19,7 +19,7 @@ require (
 	github.com/couchbase/go-couchbase v0.0.0-20191115234221-3a15f99bd1f1 // indirect
 	github.com/creack/pty v1.1.9 // indirect
 	github.com/daaku/go.zipexe v1.0.1 // indirect
-	github.com/dustin/go-humanize v1.0.0 // indirect
+	github.com/dustin/go-humanize v1.0.0
 	github.com/fatih/color v1.7.0
 	github.com/flarco/stacktrace v0.0.0-20190606122717-05f59122ae1a
 	github.com/frankban/quicktest v1.6.0 // indirect
@@ -37,7 +37,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.11.3 // indirect
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
-	github.com/integrii/flaggy v1.4.3 // indirect
+	github.com/integrii/flaggy v1.4.3
 	github.com/jinzhu/gorm v1.9.11
 	github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af
 	github.com/jmoiron/sqlx v1.2.0
