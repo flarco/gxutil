@@ -36,7 +36,7 @@ jobs:
         pkger -include github.com/flarco/gxutil:/templates -o cmd/sling
         
     - name: Build Sling (Mac & Linux)
-      if: matrix.os == 'macos-latest'
+      if: runner.os == 'macOS'
       run: |
         echo "Building sling-linux"
         GOOS=linux GOARCH=amd64 go build -o sling-linux cmd/sling/*.go
@@ -45,7 +45,7 @@ jobs:
         GOOS=darwin GOARCH=amd64 go build -o sling-mac cmd/sling/*.go
       
     - name: Build Sling (Windows)
-      if: matrix.os == 'windows-latest'
+      if: runner.os == 'windows'
       run: |
         echo "Building sling-win.exe"
         GOOS=windows GOARCH=386 go build -o sling-win.exe cmd/sling/*.go
