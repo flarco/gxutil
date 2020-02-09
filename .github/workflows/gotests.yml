@@ -1,4 +1,4 @@
-name: Test & Build
+name: Test
 
 on: [push]
 
@@ -9,7 +9,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ macos-latest, ubuntu-latest, windows-latest ]
+        os: [ macos-latest, ubuntu-latest ]
 
     services:
       postgres:
@@ -46,7 +46,3 @@ jobs:
         S3_REGION: ${{ secrets.S3_REGION }}
         S3_BUCKET: ${{ secrets.S3_BUCKET }}
     
-    # - name: Packer Build
-    #   run: |
-    #     go get -u github.com/gobuffalo/packr/packr
-    #     GOOS=linux GOARCH=amd64 packr build
