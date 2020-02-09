@@ -83,6 +83,7 @@ func TestDbToOut(t *testing.T) {
 			return
 		}
 
+		srcTable := srcDB.table
 		srcTableCopy := srcDB.table+"_copy"
 		cfg := Config{
 			srcDB: srcDB.URL,
@@ -103,6 +104,7 @@ func TestDbToOut(t *testing.T) {
 			assert.NoError(t, err)
 			srcDB.conn = g.GetConn(srcDB.URL)
 			srcDB.conn.Connect()
+			srcDB.conn.DropTable(srcTable)
 			srcDB.conn.DropTable(srcTableCopy)
 			srcDB.conn.Close()
 		}
