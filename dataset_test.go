@@ -10,31 +10,23 @@ import (
 
 var (
 	s3Bucket = os.Getenv("S3_BUCKET")
-	s3Region = os.Getenv("S3_REGION")
 )
 
 func TestS3(t *testing.T) {
 
 	csvPath := "templates/test1.1.csv"
 	s3Path := "test/test1.1.csv"
-	s3PathPq := "test/test1.1.parquet"
+	// s3PathPq := "test/test1.1.parquet"
 
 	csv1 := CSV{Path: csvPath}
 
+	s3 := S3{Bucket: s3Bucket}
 
-	s3 := S3{
-		Bucket: s3Bucket,
-		Region: s3Region,
-	}
-
-	err := s3.Delete(s3Path)
+	err := s3.Delete("test")
 	assert.NoError(t, err)
-
-	err = s3.Delete(s3PathPq)
-	assert.NoError(t, err)
-
-	err = s3.Delete(s3Path + ".gz")
-	assert.NoError(t, err)
+	// if err != nil {
+	// 	return
+	// }
 
 	csvFile, err := os.Open(csvPath)
 	assert.NoError(t, err)
@@ -60,6 +52,10 @@ func TestS3(t *testing.T) {
 	csvFile.Close()
 	assert.NoError(t, err)
 	assert.Equal(t, string(csvReaderOut), string(s3ReaderOut))
+
+	paths, err := s3.List("test/")
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(paths))
 
 	s3Reader, err = s3.ReadStream(s3Path + ".gz")
 	assert.NoError(t, err)
