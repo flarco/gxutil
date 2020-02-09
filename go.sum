@@ -133,6 +133,7 @@ github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJy
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/xitongsys/parquet-go v1.4.0 h1:+3+QFRRwAilhTdNcJU2hPxslLCAKJ+Tn8C2OhnCVWDo=
 github.com/xitongsys/parquet-go v1.4.0/go.mod h1:on8bl2K/PEouGNEJqxht0t3K4IyN/ABeFu84Hh3lzrE=
+github.com/xitongsys/parquet-go v1.5.0 h1:ymtvDhyslOlaZPivKezIq3EHNivuevgZAUjHHO+6/9Q=
 github.com/xitongsys/parquet-go-source v0.0.0-20191104003508-ecfa341356a6 h1:KPDKkdchSII+K5KS7iMpE062MVh2OucaM31599ER4U0=
 github.com/xitongsys/parquet-go-source v0.0.0-20191104003508-ecfa341356a6/go.mod h1:xxCx7Wpym/3QCo6JhujJX51dzSXrwmb0oH6FQb39SEA=
 go.opencensus.io v0.20.1/go.mod h1:6WKK9ahsWS3RSO+PY9ZHZUfv2irvY6gN279GOPZjmmk=

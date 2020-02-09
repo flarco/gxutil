@@ -157,18 +157,17 @@ func TestPG(t *testing.T) {
 	csv1 := CSV{
 		Path: "templates/test1.csv",
 	}
-	sample, err := csv1.Sample(1000)
+	
+	stream, err = csv1.ReadStream()
 	assert.NoError(t, err)
 
 	csvTable := "public.test1"
-	ddl, err = conn.GenerateDDL(csvTable, sample)
+	ddl, err = conn.GenerateDDL(csvTable, Dataset{Columns: stream.Columns, Rows: stream.Buffer})
 	assert.NoError(t, err)
 
 	_, err = conn.Db().Exec(ddl)
 	assert.NoError(t, err)
 
-	stream, err = csv1.ReadStream()
-	assert.NoError(t, err)
 
 	// import to database
 	_, err = conn.InsertStream(csvTable, stream)

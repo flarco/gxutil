@@ -403,17 +403,17 @@ func Decompress(reader io.Reader) (gReader io.Reader, err error) {
 	bReader := bufio.NewReader(reader)
 	testBytes, err := bReader.Peek(2)
 	if err != nil {
-		return reader, err
+		return bReader, err
 	}
 
 	if testBytes[0] == 31 && testBytes[1] == 139 {
 		// is gzip 
-		gReader, err = gzip.NewReader(reader)
+		gReader, err = gzip.NewReader(bReader)
 		if err != nil {
-			return reader, err
+			return bReader, err
 		}
 	} else {
-		gReader = reader
+		gReader = bReader
 	}
 
 	return gReader, err
