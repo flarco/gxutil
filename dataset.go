@@ -252,6 +252,10 @@ func (data *Dataset) InferColumnTypes() {
 	var columns []Column
 	var stats []ColumnStats
 
+	if len(data.Rows) == 0 {
+		return
+	}
+
 	for i, field := range data.GetFields() {
 		columns = append(columns, Column{
 			Name:     field,
