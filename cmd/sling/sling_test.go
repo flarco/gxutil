@@ -64,9 +64,9 @@ func TestInToDb(t *testing.T) {
 		testFile1.Seek(0, 0)
 
 		cfg := Config{
+			file:     testFile1,
 			tgtDB:    tgtDB.URL,
 			tgtTable: tgtDB.table,
-			file:     testFile1,
 		}
 		runInToDB(cfg)
 	}
