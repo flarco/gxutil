@@ -27,18 +27,18 @@ jobs:
   
     - name: Prepare Build
       run: |
-      export GO_BIN_FOLDER=$HOME/go/bin
-      export TMPDIR=~/tmp/
-      export PATH=$GO_BIN_FOLDER:$PATH
-      mkdir -p $TMPDIR
-      go get github.com/markbates/pkger/cmd/pkger
-      
-      pkger -include github.com/flarco/gxutil:/templates -o cmd/sling
+        export GO_BIN_FOLDER=$HOME/go/bin
+        export TMPDIR=~/tmp/
+        export PATH=$GO_BIN_FOLDER:$PATH
+        mkdir -p $TMPDIR
+        go get github.com/markbates/pkger/cmd/pkger
+        
+        pkger -include github.com/flarco/gxutil:/templates -o cmd/sling
       
     - name: Build Sling (Linux)
       if: matrix.os == 'ubuntu-latest'
       run: |
-      echo "Building sling-linux"
+        echo "Building sling-linux"
         GOOS=linux GOARCH=amd64 go build -o sling-linux cmd/sling/*.go
         
     - name: Build Sling (Mac)
