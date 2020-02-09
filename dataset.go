@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"bufio"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cast"
@@ -396,8 +397,24 @@ func Compress(reader io.Reader) io.Reader {
 	return pr
 }
 
-// Decompress uses gzip to decompress
-func Decompress(reader io.Reader) (io.Reader, error) {
-	gr, err := gzip.NewReader(reader)
-	return gr, err
+// Decompress uses gzip to decompress if it is gzip. Otherwise return same reader
+func Decompress(reader io.Reader) (gReader io.Reader, err error) {
+
+	bReader := bufio.NewReader(reader)
+	testBytes, err := bReader.Peek(2)
+	if err != nil {
+		return reader, err
+	}
+
+	if testBytes[0] == 31 && testBytes[1] == 139 {
+		// is gzip 
+		gReader, err = gzip.NewReader(reader)
+		if err != nil {
+			return reader, err
+		}
+	} else {
+		gReader = reader
+	}
+
+	return gReader, err
 }

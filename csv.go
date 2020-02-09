@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"bufio"
 	"os"
 	"time"
 
@@ -123,8 +124,7 @@ func castVal(val interface{}, typ string) interface{} {
 }
 
 // ReadStream returns the read CSV stream with Line 1 as header
-func (c *CSV) ReadStream() (Datastream, error) {
-	var ds Datastream
+func (c *CSV) ReadStream() (ds Datastream, err error) {
 	var r *csv.Reader
 
 	if c.File == nil && c.Reader == nil {
@@ -133,13 +133,18 @@ func (c *CSV) ReadStream() (Datastream, error) {
 			return ds, err
 		}
 		c.File = file
+		c.Reader = bufio.NewReader(c.File)
+	} else if c.File != nil {
+		c.Reader = bufio.NewReader(c.File)
 	}
 
-	if c.Reader == nil {
-		r = csv.NewReader(c.File)
-	} else {
-		r = csv.NewReader(c.Reader)
+	// decompress if gzip
+	reader, err := Decompress(c.Reader)
+	if err != nil {
+		return ds, err
 	}
+	
+	r = csv.NewReader(reader)
 
 	row0, err := r.Read()
 	if err != nil {

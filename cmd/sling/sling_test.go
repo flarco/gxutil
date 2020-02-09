@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"bufio"
 	"io/ioutil"
 	"testing"
 	"github.com/stretchr/testify/assert"
@@ -36,13 +37,27 @@ var DBs = []testDB{
 	// SnowflakeURL,
 }
 
+var DBPtrs [10]*testDB;
+
+
+// func TestDbConn(t *testing.T) {
+// 	for i, DB := range DBs {
+// 		DB.conn = g.GetConn(DB.URL)
+// 		DB.conn.Connect()
+// 		DBPtrs[i] = &DB
+// 	}
+// }
+
 func TestInToDb(t *testing.T) {
-	testFile1, err := os.Open("tests/test1.1.csv")
+	testFile1, err := os.Open("tests/test1.1.csv.gz")
 	if err != nil {
 		assert.NoError(t, err)
 		return
 	}
-	testFile1Bytes, err = ioutil.ReadAll(testFile1)
+
+	tReader, err := g.Decompress(bufio.NewReader(testFile1))
+	assert.NoError(t, err)
+	testFile1Bytes, err = ioutil.ReadAll(tReader)
 
 	for _, tgtDB := range DBs {
 		testFile1.Seek(0, 0)
