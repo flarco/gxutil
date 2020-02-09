@@ -406,6 +406,7 @@ func Decompress(reader io.Reader) (gReader io.Reader, err error) {
 		return bReader, err
 	}
 
+	// https://stackoverflow.com/a/28332019
 	if testBytes[0] == 31 && testBytes[1] == 139 {
 		// is gzip 
 		gReader, err = gzip.NewReader(bReader)
