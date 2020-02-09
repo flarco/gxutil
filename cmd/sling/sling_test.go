@@ -1,30 +1,32 @@
 package main
 
 import (
-	"os"
 	"bufio"
 	"io/ioutil"
+	"os"
 	"testing"
-	"github.com/stretchr/testify/assert"
+
 	g "github.com/flarco/gxutil"
+	"github.com/stretchr/testify/assert"
 )
 
 type testDB struct {
-	name   string
-	URL    string
-	table  string
-	conn   g.Connection
+	name      string
+	URL       string
+	table     string
+	conn      g.Connection
+	connected bool
 }
 
 var (
 	testFile1Bytes []byte
-	PostgresURL = testDB{name: "Postgres", URL: os.Getenv("POSTGRES_URL"), table: "public.test1"} // https://github.com/lib/pq
-	RedshiftURL = testDB{name: "Redshift", URL: os.Getenv("REDSHIFT_URL"), table: "public.test1"} // https://github.com/lib/pq
-	OracleURL = testDB{name: "Oracle", URL: os.Getenv("ORACLE_URL"), table: "public.test1"} // https://github.com/godror/godror
-	SQLServerURL = testDB{name: "SQLServer", URL: os.Getenv("SQLSERVER_URL"), table: "public.test1"} // https://github.com/denisenkom/go-mssqldb
-	MySQLURL = testDB{name: "MySQL", URL: os.Getenv("MYSQL_URL"), table: "public.test1"} // https://github.com/go-sql-driver/mysql/
-	SQLiteURL = testDB{name: "SQLite", URL: os.Getenv("SQLITE_URL"), table: "public.test1"} // https://github.com/mattn/go-sqlite3
-	SnowflakeURL = testDB{name: "Snowflake", URL: os.Getenv("SNOWFLAKE_URL"), table: "public.test1"} // https://github.com/snowflakedb/gosnowflake
+	PostgresURL    = testDB{name: "Postgres", URL: os.Getenv("POSTGRES_URL"), table: "public.test1"}   // https://github.com/lib/pq
+	RedshiftURL    = testDB{name: "Redshift", URL: os.Getenv("REDSHIFT_URL"), table: "public.test1"}   // https://github.com/lib/pq
+	OracleURL      = testDB{name: "Oracle", URL: os.Getenv("ORACLE_URL"), table: "public.test1"}       // https://github.com/godror/godror
+	SQLServerURL   = testDB{name: "SQLServer", URL: os.Getenv("SQLSERVER_URL"), table: "public.test1"} // https://github.com/denisenkom/go-mssqldb
+	MySQLURL       = testDB{name: "MySQL", URL: os.Getenv("MYSQL_URL"), table: "public.test1"}         // https://github.com/go-sql-driver/mysql/
+	SQLiteURL      = testDB{name: "SQLite", URL: os.Getenv("SQLITE_URL"), table: "public.test1"}       // https://github.com/mattn/go-sqlite3
+	SnowflakeURL   = testDB{name: "Snowflake", URL: os.Getenv("SNOWFLAKE_URL"), table: "public.test1"} // https://github.com/snowflakedb/gosnowflake
 )
 
 var DBs = []testDB{
@@ -37,8 +39,7 @@ var DBs = []testDB{
 	// SnowflakeURL,
 }
 
-var DBPtrs [10]*testDB;
-
+var DBPtrs [10]*testDB
 
 // func TestDbConn(t *testing.T) {
 // 	for i, DB := range DBs {
@@ -63,9 +64,9 @@ func TestInToDb(t *testing.T) {
 		testFile1.Seek(0, 0)
 
 		cfg := Config{
-			tgtDB: tgtDB.URL,
+			tgtDB:    tgtDB.URL,
 			tgtTable: tgtDB.table,
-			file: testFile1,
+			file:     testFile1,
 		}
 		runInToDB(cfg)
 	}
@@ -78,10 +79,10 @@ func TestDbToDb(t *testing.T) {
 	for _, srcDB := range DBs {
 		for _, tgtDB := range DBs {
 			cfg := Config{
-				srcDB: srcDB.URL,
+				srcDB:    srcDB.URL,
 				srcTable: srcDB.table,
-				tgtDB: tgtDB.URL,
-				tgtTable: srcDB.table+"_copy",
+				tgtDB:    tgtDB.URL,
+				tgtTable: srcDB.table + "_copy",
 			}
 			runDbToDb(cfg)
 		}
@@ -99,15 +100,14 @@ func TestDbToOut(t *testing.T) {
 		}
 
 		srcTable := srcDB.table
-		srcTableCopy := srcDB.table+"_copy"
+		srcTableCopy := srcDB.table + "_copy"
 		cfg := Config{
-			srcDB: srcDB.URL,
+			srcDB:    srcDB.URL,
 			srcTable: srcTableCopy,
-			file: testFile2,
+			file:     testFile2,
 		}
 		runDbToOut(cfg)
 
-		
 		testFile2, err = os.Open(filePath2)
 		assert.NoError(t, err)
 		testFile2Bytes, err := ioutil.ReadAll(testFile2)
