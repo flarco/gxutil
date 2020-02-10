@@ -97,8 +97,30 @@ analysis:
   fields_date_distro_wide: |
   fields_group: |
 
+# native to general
+native_type_map:
+  int64: "integer"
+  int: "integer"
+  integer: "integer"
+  bigint: "integer"
+  number: "decimal"
+  float64: "decimal"
+  float: "decimal"
+  double: "decimal"
+  real: "decimal"
+  date: "date"
+  timestamp: "timestamp"
+  text: "string"
+  object: "string"
+  string: "string"
+  varchar: "string"
+  boolean: "bool"
+  datetime: "datetime"
+  
+# general to native
 general_type_map:
   string: "text"
+  bool: "integer"
   integer: "number"
   number: "number"
   decimal: "real"

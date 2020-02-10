@@ -1,6 +1,7 @@
 package gxutil
 
 import (
+	"log"
 	"os"
 	"strings"
 	"testing"
@@ -39,17 +40,60 @@ type transactions struct {
 	Notes               string    `json:"notes"`
 }
 
-func TestPG(t *testing.T) {
+type testDB struct {
+	conn       Connection
+	name       string
+	URL        string
+	viewDDL    string
+	schema     string
+	placeDDL   string
+	placeVwDDL string
+}
 
-	viewDdl := `
-	create or replace view place_vw as
-	select * from place
-	where telcode = 65
-	`
-	conn := GetConn(PostgresURL)
-	err := conn.Connect()
-	assert.NoError(t, err)
+var DBs = []*testDB{
+	&testDB{
+		name:       "Postgres",
+		URL:        os.Getenv("POSTGRES_URL"),
+		viewDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
+		schema:     "public",
+		placeDDL:   "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
+		placeVwDDL: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
+	},
+	&testDB{
+		name: "SQLite",
+		URL:  "file:./test.db",
+		viewDDL: `create view place_vw as select * from place where telcode = 65`,
+		schema:     "main",
+		placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
+		placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
+	},
+}
 
+func init() {
+	for _, db := range DBs {
+		if db.URL == "" {
+			log.Fatal("No Env Var URL for " + db.name)
+		} else if db.name == "SQLite" {
+			os.Remove(strings.ReplaceAll(db.URL, "file:", ""))
+		}
+		db.conn = GetConn(db.URL)
+		db.conn.Connect()
+	}
+}
+
+func TestDBs(t *testing.T) {
+	for _, db := range DBs {
+		DBTest(t, db)
+		if db.name == "SQLite" {
+			os.Remove(strings.ReplaceAll(db.URL, "file:", ""))
+		}
+	}
+}
+
+func DBTest(t *testing.T, db *testDB) {
+	println("Testing " + db.name)
+
+	conn := db.conn
 	gConn, err := conn.GetGormConn()
 	assert.NoError(t, err)
 
@@ -59,7 +103,7 @@ func TestPG(t *testing.T) {
 	// conn.Db().MustExec(tablesDDL)
 	gConn.SingularTable(true)
 	gConn.AutoMigrate(&person{}, &place{}, &transactions{})
-	conn.Db().MustExec(viewDdl)
+	conn.Db().MustExec(db.viewDDL)
 
 	tx := conn.Db().MustBegin()
 	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "Jason", "Moiron", "jmoiron@jmoiron.net")
@@ -109,7 +153,7 @@ func TestPG(t *testing.T) {
 	assert.Greater(t, len(data.Rows), 0)
 
 	// GetTables
-	data, err = conn.GetTables("public")
+	data, err = conn.GetTables(db.schema)
 	assert.NoError(t, err)
 	assert.Greater(t, len(data.Rows), 0)
 
@@ -120,54 +164,53 @@ func TestPG(t *testing.T) {
 	assert.Greater(t, data.Duration, 0.0)
 
 	// GetColumns
-	data, err = conn.GetColumns("public.person")
+	data, err = conn.GetColumns(db.schema + ".person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, "text", data.Records()[0]["data_type"])
+	assert.Contains(t, []string{"text", "varchar(255)"}, data.Records()[0]["data_type"])
 
 	// GetPrimarkKeys
-	data, err = conn.GetPrimarkKeys("public.person")
+	data, err = conn.GetPrimarkKeys(db.schema + ".person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 1)
 	assert.Equal(t, "first_name", data.Records()[0]["column_name"])
 
 	// GetIndexes
-	data, err = conn.GetIndexes("public.place")
+	data, err = conn.GetIndexes(db.schema + ".place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
 	assert.Equal(t, "city", data.Records()[1]["column_name"])
 
 	// GetColumnsFull
-	data, err = conn.GetColumnsFull("public.place")
+	data, err = conn.GetColumnsFull(db.schema + ".place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
 	assert.Equal(t, "bigint", data.Records()[2]["data_type"])
 
 	// GetDDL of table
-	ddl, err := conn.GetDDL("public.place")
+	ddl, err := conn.GetDDL(db.schema + ".place")
 	assert.NoError(t, err)
-	assert.Equal(t, "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)", ddl)
+	assert.Equal(t, db.placeDDL, ddl)
 
 	// GetDDL of view
-	ddl, err = conn.GetDDL("public.place_vw")
+	ddl, err = conn.GetDDL(db.schema + ".place_vw")
 	assert.NoError(t, err)
-	assert.Equal(t, " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);", ddl)
+	assert.Equal(t, db.placeVwDDL, ddl)
 
 	// load Csv from test file
 	csv1 := CSV{
 		Path: "templates/test1.csv",
 	}
-	
+
 	stream, err = csv1.ReadStream()
 	assert.NoError(t, err)
 
-	csvTable := "public.test1"
+	csvTable := db.schema + ".test1"
 	ddl, err = conn.GenerateDDL(csvTable, Dataset{Columns: stream.Columns, Rows: stream.Buffer})
 	assert.NoError(t, err)
 
 	_, err = conn.Db().Exec(ddl)
 	assert.NoError(t, err)
-
 
 	// import to database
 	_, err = conn.InsertStream(csvTable, stream)
@@ -179,21 +222,21 @@ func TestPG(t *testing.T) {
 	assert.Equal(t, uint64(1000), count)
 
 	// Test Schemata
-	sData, err := conn.GetSchemata("public")
+	sData, err := conn.GetSchemata(db.schema)
 	assert.NoError(t, err)
-	assert.Equal(t, "public", sData.Name)
+	assert.Equal(t, db.schema, sData.Name)
 	assert.Contains(t, sData.Tables, "person")
 	assert.Contains(t, sData.Tables, "place_vw")
-	assert.Contains(t, conn.Schemata().Tables, "public.person")
+	assert.Contains(t, conn.Schemata().Tables, db.schema+".person")
 	assert.Len(t, sData.Tables["person"].Columns, 3)
-	assert.Equal(t, "text", sData.Tables["person"].ColumnsMap["email"].Type)
+	assert.Contains(t, []string{"text", "varchar(255)"}, sData.Tables["person"].ColumnsMap["email"].Type)
 	assert.Equal(t, true, sData.Tables["place_vw"].IsView)
-	assert.Equal(t, int64(3), conn.Schemata().Tables["public.person"].ColumnsMap["email"].Position)
+	assert.Equal(t, int64(3), conn.Schemata().Tables[db.schema+".person"].ColumnsMap["email"].Position)
 
 	// RunAnalysis field_stat
 	values := map[string]interface{}{
-		"t1":         "public.place",
-		"t2":         "public.place",
+		"t1":         db.schema + ".place",
+		"t2":         db.schema + ".place",
 		"t1_field":   "t1.country",
 		"t1_fields1": "country",
 		"t1_filter":  "1=1",
@@ -205,189 +248,28 @@ func TestPG(t *testing.T) {
 	data, err = conn.RunAnalysis("table_join_match", values)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, 0.0, data.Records()[0]["t1_null_cnt"])
+	assert.Contains(t, []interface{}{0.0, int64(0)}, data.Records()[0]["t1_null_cnt"])
 	assert.Equal(t, 100.0, data.Records()[1]["match_rate"])
 
 	// RunAnalysisTable field_stat
-	data, err = conn.RunAnalysisTable("table_count", "public.person", "public.place")
+	data, err = conn.RunAnalysisTable("table_count", db.schema+".person", db.schema+".place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
 	assert.Equal(t, int64(2), data.Records()[0]["cnt"])
 	assert.Equal(t, int64(3), data.Records()[1]["cnt"])
 
 	// RunAnalysisField field_stat
-	data, err = conn.RunAnalysisField("field_stat", "public.person")
+	data, err = conn.RunAnalysisField("field_stat", db.schema+".person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
 	assert.Equal(t, int64(2), data.Records()[0]["tot_cnt"])
 	assert.Equal(t, int64(0), data.Records()[1]["f_dup_cnt"])
-
-	PGtoPGTest(t, "public.transactions")
 
 	// Drop all tables
 	err = conn.DropTable("person", "place", "transactions", "test1")
 	assert.NoError(t, err)
 
 	conn.Close()
-}
-
-func TestSQLite(t *testing.T) {
-	err := os.Remove(SQLiteURL)
-
-	viewDdl := `
-	create view place_vw as
-	select * from place
-	where telcode = 65
-	`
-	conn := GetConn("file:" + SQLiteURL)
-	err = conn.Connect()
-	assert.NoError(t, err)
-
-	gConn, err := conn.GetGormConn()
-	assert.NoError(t, err)
-
-	err = conn.DropTable("person", "place", "transactions")
-	assert.NoError(t, err)
-
-	// conn.Db().MustExec(tablesDDL)
-	gConn.SingularTable(true)
-	gConn.AutoMigrate(&person{}, &place{}, &transactions{})
-	gConn.Close()
-
-	conn.Db().MustExec(viewDdl)
-	tx := conn.Db().MustBegin()
-	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "Jason", "Moiron", "jmoiron@jmoiron.net")
-	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "John", "Doe", "johndoeDNE@gmail.net")
-	tx.MustExec("INSERT INTO place (country, city, telcode) VALUES ($1, $2, $3)", "United States", "New York", "1")
-	tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Hong Kong", "852")
-	tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Singapore", "65")
-	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2019-10-10", "test\" \nproduct", "65.657")
-	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2020-10-10", "new \nproduct", "5.657")
-	tx.Commit()
-
-	data, err := conn.Query(`select * from person`)
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 2)
-
-	data, err = conn.Query(`select * from place`)
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 3)
-
-	data, err = conn.Query(`select * from transactions`)
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, 65.657, data.Records()[0]["amount"])
-
-	// GetSchemas
-	data, err = conn.GetSchemas()
-	assert.NoError(t, err)
-	assert.Greater(t, len(data.Rows), 0)
-
-	// GetTables
-	data, err = conn.GetTables("main")
-	assert.NoError(t, err)
-	assert.Greater(t, len(data.Rows), 0)
-
-	// GetViews
-	data, err = conn.GetViews("information_schema")
-	assert.NoError(t, err)
-	assert.Greater(t, len(data.Rows), 0)
-	assert.Greater(t, data.Duration, 0.0)
-
-	// GetColumns
-	data, err = conn.GetColumns("person")
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, "varchar(255)", data.Records()[0]["data_type"])
-
-	// GetPrimarkKeys
-	data, err = conn.GetPrimarkKeys("main.person")
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 1)
-	assert.Equal(t, "first_name", data.Records()[0]["column_name"])
-
-	// GetIndexes
-	data, err = conn.GetIndexes("main.place")
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, "city", data.Records()[1]["column_name"])
-
-	// GetColumnsFull
-	data, err = conn.GetColumnsFull("main.place")
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, "bigint", data.Records()[2]["data_type"])
-
-	// GetDDL of table
-	ddl, err := conn.GetDDL("main.place")
-	assert.NoError(t, err)
-	assert.Equal(t, "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )", ddl)
-
-	// GetDDL of view
-	ddl, err = conn.GetDDL("main.place_vw")
-	assert.NoError(t, err)
-	assert.Equal(t, "CREATE VIEW place_vw as\n\tselect * from place\n\twhere telcode = 65", ddl)
-
-	// load Csv from seed file
-	// box := packr.NewBox("./seeds")
-	// file, err := box.Open("place.csv")
-	// assert.NoError(t, err)
-	// data.FromCsv(file)
-
-	// import to database
-
-	// select back to assert equality
-
-	// Test Schemata
-	sData, err := conn.GetSchemata("main")
-	assert.NoError(t, err)
-	assert.Equal(t, "main", sData.Name)
-	assert.Contains(t, sData.Tables, "person")
-	assert.Contains(t, sData.Tables, "place_vw")
-	assert.Contains(t, conn.Schemata().Tables, "main.person")
-	assert.Len(t, sData.Tables["person"].Columns, 3)
-	assert.Equal(t, "varchar(255)", sData.Tables["person"].ColumnsMap["email"].Type)
-	assert.Equal(t, true, sData.Tables["place_vw"].IsView)
-	assert.Equal(t, int64(3), conn.Schemata().Tables["main.person"].ColumnsMap["email"].Position)
-
-	// RunAnalysis field_stat
-	values := map[string]interface{}{
-		"t1":         "main.place",
-		"t2":         "main.place",
-		"t1_field":   "t1.country",
-		"t1_fields1": "country",
-		"t1_filter":  "1=1",
-		"t2_field":   "t2.country",
-		"t2_fields1": "country",
-		"t2_filter":  "1=1",
-		"conds":      `lower(t1.country) = lower(t2.country)`,
-	}
-	data, err = conn.RunAnalysis("table_join_match", values)
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, int64(0), data.Records()[0]["t1_null_cnt"])
-	assert.Equal(t, 100.0, data.Records()[1]["match_rate"])
-
-	// RunAnalysisTable field_stat
-	data, err = conn.RunAnalysisTable("table_count", "main.person", "main.place")
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, int64(2), data.Records()[0]["cnt"])
-	assert.Equal(t, int64(3), data.Records()[1]["cnt"])
-
-	// RunAnalysisField field_stat
-	data, err = conn.RunAnalysisField("field_stat", "main.person")
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, int64(2), data.Records()[0]["tot_cnt"])
-	assert.Equal(t, int64(0), data.Records()[1]["f_dup_cnt"])
-
-	// Drop all tables
-	err = conn.DropTable("person", "place", "transactions")
-	assert.NoError(t, err)
-
-	err = os.Remove(SQLiteURL)
-	assert.NoError(t, err)
 }
 
 func PGtoPGTest(t *testing.T, srcTable string) {
