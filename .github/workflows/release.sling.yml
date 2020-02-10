@@ -44,12 +44,14 @@ jobs:
       run: |
         echo "Building sling-linux"
         GOOS=linux GOARCH=amd64 go build -o sling-linux cmd/sling/*.go
+        gzip sling-linux
 
     - name: Build Sling (Mac)
       if: runner.os == 'macOS'
       run: |
         echo "Building sling-mac"
         GOOS=darwin GOARCH=amd64 go build -o sling-mac cmd/sling/*.go
+        gzip sling-mac
       
     - name: Build Sling (Windows)
       if: runner.os == 'windows'
