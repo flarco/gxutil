@@ -58,12 +58,12 @@ jobs:
         GOOS=windows GOARCH=386 go build -o sling-win.exe cmd/sling/*.go
 
     
-    - name: Release Binary
+    - name: Release Sling Binary
       uses: "marvinpinto/action-automatic-releases@latest"
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        automatic_release_tag: "latest-${{ runner.os }}"
+        automatic_release_tag: "sling-latest-${{ runner.os }}"
         prerelease: true
-        title: "Development Build: ${{ runner.os }}"
+        title: "Sling: ${{ runner.os }}"
         files: |
           sling-*
