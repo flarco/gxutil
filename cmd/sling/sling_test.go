@@ -128,6 +128,9 @@ func TestDbToDb(t *testing.T) {
 
 	for _, srcDB := range DBs {
 		for _, tgtDB := range DBs {
+			if srcDB.name == "SQLite" && tgtDB.name == "SQLite" {
+				continue
+			}
 			println(g.F("\n >> Tranferring from %s to %s", srcDB.name, tgtDB.name))
 			cfg := Config{
 				srcDB:    srcDB.URL,
