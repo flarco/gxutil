@@ -1,0 +1,71 @@
+name: Build & Release
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ macos-latest, ubuntu-latest ]
+
+    steps:
+    - uses: actions/checkout@v1
+
+    - name: Dump context
+      env:
+        JOB_CONTEXT: ${{ toJson(job) }}
+        MATRIX_CONTEXT: ${{ toJson(matrix) }}
+        RUNNER_CONTEXT: ${{ toJson(runner) }}
+      run: |
+        echo "JOB_CONTEXT -> $JOB_CONTEXT"
+        echo "MATRIX_CONTEXT -> $MATRIX_CONTEXT"
+        echo "RUNNER_CONTEXT -> $RUNNER_CONTEXT"
+      
+    - name: Set up GoLang
+      uses: actions/setup-go@v1
+      with:
+        go-version: '1.13.1'
+  
+    - name: Prepare Build
+      run: |
+        export GO_BIN_FOLDER=$HOME/go/bin
+        export TMPDIR=~/tmp/
+        export PATH=$GO_BIN_FOLDER:$PATH
+        mkdir -p $TMPDIR
+        go get github.com/markbates/pkger/cmd/pkger
+        
+        pkger -include github.com/flarco/gxutil:/templates -o cmd/sling
+        
+    - name: Build Sling (Linux)
+      if: runner.os == 'linux'
+      run: |
+        echo "Building sling-linux"
+        GOOS=linux GOARCH=amd64 go build -o sling-linux cmd/sling/*.go
+        gzip sling-linux
+
+    - name: Build Sling (Mac)
+      if: runner.os == 'macOS'
+      run: |
+        echo "Building sling-mac"
+        GOOS=darwin GOARCH=amd64 go build -o sling-mac cmd/sling/*.go
+        gzip sling-mac
+      
+    - name: Build Sling (Windows)
+      if: runner.os == 'windows'
+      run: |
+        echo "Building sling-win.exe"
+        GOOS=windows GOARCH=386 go build -o sling-win.exe cmd/sling/*.go
+
+    
+    - name: Release Sling Binary
+      uses: "marvinpinto/action-automatic-releases@latest"
+      with:
+        repo_token: "${{ secrets.GITHUB_TOKEN }}"
+        automatic_release_tag: "sling-latest-${{ runner.os }}"
+        prerelease: true
+        title: "Sling: ${{ runner.os }}"
+        files: |
+          sling-*

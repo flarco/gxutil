@@ -335,6 +335,7 @@ native_type_map:
 general_type_map:
   string: "varchar"
   integer: "integer"
+  number: "decimal"
   decimal: "decimal"
   date: "date"
   datetime: "timestamp"

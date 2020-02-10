@@ -119,12 +119,11 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 		gzReader, err := s3.ReadStream(s3PartPath)
 		LogErrorExit(err)
 
-		reader, err := Decompress(gzReader)
-		LogErrorExit(err)
-
+		// reader, err := Decompress(gzReader)
+		// LogErrorExit(err)
 		// reader := Tee(reader0, 50)
 
-		csvPart := CSV{Reader: reader}
+		csvPart := CSV{Reader: gzReader}
 		dsPart, err := csvPart.ReadStream()
 
 		if dsMain.Columns == nil {

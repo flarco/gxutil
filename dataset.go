@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"bufio"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cast"
@@ -252,6 +253,10 @@ func (data *Dataset) InferColumnTypes() {
 	var columns []Column
 	var stats []ColumnStats
 
+	if len(data.Rows) == 0 {
+		return
+	}
+
 	for i, field := range data.GetFields() {
 		columns = append(columns, Column{
 			Name:     field,
@@ -392,8 +397,25 @@ func Compress(reader io.Reader) io.Reader {
 	return pr
 }
 
-// Decompress uses gzip to decompress
-func Decompress(reader io.Reader) (io.Reader, error) {
-	gr, err := gzip.NewReader(reader)
-	return gr, err
+// Decompress uses gzip to decompress if it is gzip. Otherwise return same reader
+func Decompress(reader io.Reader) (gReader io.Reader, err error) {
+
+	bReader := bufio.NewReader(reader)
+	testBytes, err := bReader.Peek(2)
+	if err != nil {
+		return bReader, err
+	}
+
+	// https://stackoverflow.com/a/28332019
+	if testBytes[0] == 31 && testBytes[1] == 139 {
+		// is gzip 
+		gReader, err = gzip.NewReader(bReader)
+		if err != nil {
+			return bReader, err
+		}
+	} else {
+		gReader = bReader
+	}
+
+	return gReader, err
 }

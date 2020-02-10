@@ -1,11 +1,15 @@
-name: Test & Build
+name: Test
 
 on: [push]
 
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
 
     services:
       postgres:
@@ -27,7 +31,12 @@ jobs:
         go-version: '1.13.1'
     
     - name: Run Go Tests
-      run: go test -v
+      run: |
+        go test -v
+
+        cd cmd/sling
+        go test -v
+
       env:
         POSTGRES_HOST: localhost
         POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
@@ -37,7 +46,3 @@ jobs:
         S3_REGION: ${{ secrets.S3_REGION }}
         S3_BUCKET: ${{ secrets.S3_BUCKET }}
     
-    # - name: Packer Build
-    #   run: |
-    #     go get -u github.com/gobuffalo/packr/packr
-    #     GOOS=linux GOARCH=amd64 packr build

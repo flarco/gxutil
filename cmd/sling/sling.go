@@ -41,12 +41,12 @@ type Config struct {
 	truncate bool
 	in       bool
 	out      bool
+	file     *os.File
 }
 
 func Init() {
 	cfg := Config{}
 	showExamples := false
-	start = time.Now()
 
 	// determine if stdin data is piped
 	// https://stackoverflow.com/a/26567513
@@ -115,10 +115,12 @@ func Init() {
 	}
 
 	if InToDB {
+		cfg.file = os.Stdin
 		runInToDB(cfg)
 	} else if DbToDb {
 		runDbToDb(cfg)
 	} else if DbToOut {
+		cfg.file = os.Stdout
 		runDbToOut(cfg)
 	} else if showExamples {
 		println(examples)
@@ -126,11 +128,12 @@ func Init() {
 }
 
 func runDbToOut(c Config) {
+	start = time.Now()
 	srcConn := g.GetConn(c.srcDB)
 	err := srcConn.Connect()
 	g.LogErrorExit(err)
 
-	csv := g.CSV{File: os.Stdout}
+	csv := g.CSV{File: c.file}
 
 	sql := `select * from ` + c.srcTable
 
@@ -158,14 +161,16 @@ func runDbToOut(c Config) {
 	g.LogErrorExit(err)
 	g.Log(g.F("wrote %d rows [%s r/s]", cnt, getRate(cnt)))
 
+	srcConn.Close()
 }
 
 func runInToDB(c Config) {
+	start = time.Now()
 	tgtConn := g.GetConn(c.tgtDB)
 	err := tgtConn.Connect()
 	g.LogErrorExit(err)
 
-	csv := g.CSV{File: os.Stdin}
+	csv := g.CSV{File: c.file}
 	stream, err := csv.ReadStream()
 	g.LogErrorExit(err)
 
@@ -195,6 +200,7 @@ func runInToDB(c Config) {
 }
 
 func runDbToDb(c Config) {
+	start = time.Now()
 
 	// var srcConn, tgtConn PostgresConn
 	srcConn := g.GetConn(c.srcDB)
@@ -232,7 +238,6 @@ func runDbToDb(c Config) {
 	g.LogErrorExit(err)
 
 	if !c.append && !c.truncate {
-
 		d := g.Dataset{Columns: stream.Columns, Rows: stream.Buffer}
 		newDdl, err := tgtConn.GenerateDDL(c.tgtTable, d)
 
