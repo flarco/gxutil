@@ -117,6 +117,7 @@ func TestInToDb(t *testing.T) {
 			file:     testFile1,
 			tgtDB:    tgtDB.URL,
 			tgtTable: tgtDB.table,
+			drop:     true,
 		}
 		runInToDB(cfg)
 	}
@@ -137,6 +138,7 @@ func TestDbToDb(t *testing.T) {
 				srcTable: srcDB.table,
 				tgtDB:    tgtDB.URL,
 				tgtTable: tgtDB.table + "_copy",
+				drop:     true,
 			}
 			runDbToDb(cfg)
 		}
@@ -160,6 +162,7 @@ func TestDbToOut(t *testing.T) {
 			srcDB:    srcDB.URL,
 			srcTable: srcTable,
 			file:     testFile2,
+			drop:     true,
 		}
 		runDbToOut(cfg)
 
@@ -184,7 +187,7 @@ func TestDbToOut(t *testing.T) {
 			testFile1Lines := len(strings.Split(string(testFile1Bytes), "\n"))
 			testFile2Lines := len(strings.Split(string(testFile2Bytes), "\n"))
 			equal := assert.Equal(t, testFile1Lines, testFile2Lines)
-			
+
 			if equal {
 				err = os.Remove(filePath2)
 				os.Remove(strings.ReplaceAll(srcDB.URL, "file:", ""))
