@@ -1,6 +1,7 @@
 package gxutil
 
 import (
+	"bufio"
 	"compress/gzip"
 	"database/sql"
 	"encoding/csv"
@@ -10,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"bufio"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cast"
@@ -70,12 +70,17 @@ func ParseString(s string) interface{} {
 		return i
 	}
 
-	// date
-	// layout := "2006-01-02T15:04:05.000Z"
-	layout := "2006-01-02 15:04:05"
-	t, err := time.Parse(layout, s)
-	if err == nil {
-		return t
+	// date layouts to try out
+	layouts := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+		"2006-01-02T15:04:05.000Z",
+	}
+	for _, layout := range layouts {
+		t, err := time.Parse(layout, s)
+		if err == nil {
+			return t
+		}
 	}
 
 	// float
@@ -408,7 +413,7 @@ func Decompress(reader io.Reader) (gReader io.Reader, err error) {
 
 	// https://stackoverflow.com/a/28332019
 	if testBytes[0] == 31 && testBytes[1] == 139 {
-		// is gzip 
+		// is gzip
 		gReader, err = gzip.NewReader(bReader)
 		if err != nil {
 			return bReader, err
