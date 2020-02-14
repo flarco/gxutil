@@ -6,7 +6,7 @@ A Piped CSV compatible ELT tool.
 
 **Go Install**
 
-`go get github/com/flarco/cmd/sling`
+`go get github.com/flarco/gxutil/cmd/sling`
 
 **Mac Binary**
 ```
