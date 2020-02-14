@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cast"
 )
 
-var version = "0.2"
+var version = "0.3"
 
 var start time.Time
 var DbDb *flaggy.Subcommand

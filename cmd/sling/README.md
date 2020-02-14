@@ -1,7 +1,26 @@
 # sling
+
 A Piped CSV compatible ELT tool.
 
 # Getting Started
+
+**Go Install**
+
+`go get github/com/flarco/cmd/sling`
+
+**Mac Binary**
+```
+wget https://github.com/flarco/gxutil/releases/download/sling-latest-macOS/sling-mac.gz
+gzip -d sling-mac.gz
+./sling-mac --help
+```
+
+**Linux Binary**
+```
+wget https://github.com/flarco/gxutil/releases/download/sling-latest-Linux/sling-linux.gz
+gzip -d sling-linux.gz
+./sling-linux --help
+```
 
 ```
 git clone git@github.com:flarco/sling.git
