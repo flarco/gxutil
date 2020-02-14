@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cast"
 )
 
-var version = "0.2"
+var version = "0.3"
 
 var start time.Time
 var DbDb *flaggy.Subcommand
@@ -37,7 +37,7 @@ type Config struct {
 	sqlFile  string
 	s3Bucket string
 	limit    uint64
-	append   bool
+	drop     bool
 	truncate bool
 	in       bool
 	out      bool
@@ -75,7 +75,7 @@ func Init() {
 	// flaggy.Bool(&cfg.out, "", "out", "Use STDOUT Pipe as target (as CSV format).")
 	flaggy.String(&cfg.sqlFile, "", "sqlFile", "The path of sql file to use as query")
 	flaggy.UInt64(&cfg.limit, "", "limit", "The maximum rows to transfer (0 is infinite)")
-	flaggy.Bool(&cfg.append, "", "append", "Append to the target table (default drops and recreates).")
+	flaggy.Bool(&cfg.drop, "", "drop", "Drop the target table before load (default appends).")
 	flaggy.Bool(&cfg.truncate, "", "truncate", "Truncate the target table before inserting / appending (default drops and recreates).\n")
 	flaggy.String(&cfg.s3Bucket, "", "s3Bucket", "The S3 Bucket to use (for Redshift transfers).")
 	flaggy.Bool(&showExamples, "", "examples", "Shows some examples.")
@@ -174,7 +174,7 @@ func runInToDB(c Config) {
 	stream, err := csv.ReadStream()
 	g.LogErrorExit(err)
 
-	if !c.append && !c.truncate {
+	if c.drop {
 		d := g.Dataset{Columns: stream.Columns, Rows: stream.Buffer}
 		newDdl, err := tgtConn.GenerateDDL(c.tgtTable, d)
 
@@ -237,7 +237,7 @@ func runDbToDb(c Config) {
 	stream, err := srcConn.BulkStream(sql)
 	g.LogErrorExit(err)
 
-	if !c.append && !c.truncate {
+	if c.drop {
 		d := g.Dataset{Columns: stream.Columns, Rows: stream.Buffer}
 		newDdl, err := tgtConn.GenerateDDL(c.tgtTable, d)
 

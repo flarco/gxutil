@@ -1,9 +1,7 @@
 # gxutil
 xutil for Go
 
+## Sling
 
-- PostgreSQL
-- CSV
-- S3
-- Parquet
-- Gzip
+Please see https://github.com/flarco/gxutil/tree/master/cmd/sling for README.
+
