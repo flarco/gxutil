@@ -16,6 +16,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/markbates/pkger"
 	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/spf13/cast"
 	"gopkg.in/yaml.v2"
 )
@@ -391,11 +392,6 @@ func (conn *BaseConn) StreamRows(sql string) (ds Datastream, err error) {
 		return ds, Error(err, "SQL Error for:\n"+sql)
 	}
 
-	// fields, err := result.Columns()
-	// if err != nil {
-	// 	return ds, Error(err, "result.Columns()")
-	// }
-
 	colTypes, err := result.ColumnTypes()
 	if err != nil {
 		return ds, Error(err, "result.ColumnTypes()")
@@ -692,8 +688,8 @@ func (conn *BaseConn) RunAnalysisField(analysisName string, tableFName string, f
 	return conn.Query(sql)
 }
 
-// InsertStreamBatch inserts a stream into a table in batch
-func (conn *BaseConn) InsertStreamBatch(tableFName string, columns []string, streamRow <-chan []interface{}) error {
+// InsertBatchStream inserts a stream into a table in batch
+func (conn *BaseConn) InsertBatchStream(tableFName string, columns []string, streamRow <-chan []interface{}) error {
 	batchSize := 5000
 
 	// replaceSQL replaces the instance occurrence of any string pattern with an increasing $n based sequence

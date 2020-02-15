@@ -10,6 +10,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/fatih/color v1.7.0
 	github.com/flarco/stacktrace v0.0.0-20190606122717-05f59122ae1a
+	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/integrii/flaggy v1.4.3
 	github.com/jinzhu/gorm v1.9.11
