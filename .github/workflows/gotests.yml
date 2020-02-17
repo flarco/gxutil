@@ -19,8 +19,18 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
         ports:
-        - 5432:5432
+          - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: "mysql"
+          MYSQL_DATABASE: "mysql"
+          MYSQL_USER: "mysql"
+          MYSQL_PASSWORD: "mysql"
+        ports:
+          - 3306:3306
 
     steps:
     - uses: actions/checkout@v1
@@ -41,6 +51,7 @@ jobs:
         POSTGRES_HOST: localhost
         POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
         POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable
+        MYSQL_URL: mysql://mysql:mysql@localhost:3306/mysql
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         S3_REGION: ${{ secrets.S3_REGION }}
