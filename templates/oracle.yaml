@@ -194,3 +194,7 @@ general_type_map:
   datetime: "date"
   timestamp: "date"
   text: "nclob"
+
+# extra variables
+variable:
+  error_ignore_drop: "ORA-00942"
