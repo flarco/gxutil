@@ -39,7 +39,7 @@ jobs:
         ports:
           - 1521:1521
       
-      mssql:
+      sqlserver:
         image: mcr.microsoft.com/mssql/server:2017-latest
         env:
           ACCEPT_EULA: "Y"
