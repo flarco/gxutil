@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"reflect"
 	"strconv"
@@ -32,6 +33,11 @@ var (
 
 	// AlertEmail is the email address to send errors to
 	AlertEmail = os.Getenv("ALERT_EMAIL")
+)
+
+const (
+	alphaRunes        = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	aplhanumericRunes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 )
 
 // GetType : return the type of an interface
@@ -280,4 +286,20 @@ func Tee(reader io.Reader, limit int) io.Reader {
 	}()
 
 	return pipeR
+}
+
+// RandString returns a random string of len n with the provided char set
+// charset can be `aplha` or `aplhanumeric`
+func RandString(charset string, n int) string {
+	b := make([]byte, n)
+	letterBytes := alphaRunes
+	if charset == "aplhanumeric" {
+		letterBytes = aplhanumericRunes
+	} 
+
+	for i := range b {
+		b[i] = letterBytes[rand.Int63()%int64(len(letterBytes))]
+	}
+	
+	return string(b)
 }
