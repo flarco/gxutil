@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -30,18 +31,20 @@ sling --srcDB $POSTGRES_URL --tgtDB $POSTGRES_URL --srcTable housing.my_data2 --
 
 // Config is a config for the sling task
 type Config struct {
-	srcDB    string
-	srcTable string
-	tgtDB    string
-	tgtTable string
-	sqlFile  string
-	s3Bucket string
-	limit    uint64
-	drop     bool
-	truncate bool
-	in       bool
-	out      bool
-	file     *os.File
+	srcDB       string
+	srcTable    string
+	tgtDB       string
+	tgtTable    string
+	sqlFile     string
+	s3Bucket    string
+	limit       uint64
+	drop        bool
+	truncate    bool
+	in          bool
+	out         bool
+	file        *os.File
+	tgtTableDDL string
+	tgtTableTmp string
 }
 
 func Init() {
@@ -127,6 +130,48 @@ func Init() {
 	}
 }
 
+// writeTmpToTarget write from the temp table to the final table
+// data is already in temp table
+func writeTmpToTarget(c Config, tgtConn g.Connection) {
+	var err error
+
+	// drop / replace / insert into target
+	if c.drop {
+		err = tgtConn.DropTable(c.tgtTable)
+		g.LogErrorExit(err)
+
+		// rename tmp to tgt
+		sql := g.R(
+			tgtConn.GetTemplateValue("core.rename_table"),
+			"table", c.tgtTableTmp,
+			"new_table", c.tgtTable,
+		)
+		_, err = tgtConn.Db().Exec(sql)
+		g.LogErrorExit(err)
+	} else {
+		// insert
+
+		tgtColsData, err := tgtConn.GetColumns(c.tgtTable)
+		g.LogErrorExit(err)
+
+		tgtCols := []string{}
+		for _, row := range tgtColsData.Rows {
+			tgtCols = append(tgtCols, cast.ToString(row[0]))
+		}
+
+		sql := g.R(
+			tgtConn.GetTemplateValue("core.insert_temp"),
+			"table", c.tgtTable,
+			"cols", strings.Join(tgtCols, ", "),
+			"temp_table", c.tgtTableTmp,
+		)
+
+		_, err = tgtConn.Db().Exec(sql)
+		g.LogErrorExit(err)
+
+	}
+}
+
 func runDbToOut(c Config) {
 	start = time.Now()
 	srcConn := g.GetConn(c.srcDB)
@@ -164,6 +209,9 @@ func runDbToOut(c Config) {
 	srcConn.Close()
 }
 
+// create temp table
+// load into temp table
+// insert / upsert / replace into target table
 func runInToDB(c Config) {
 	start = time.Now()
 	tgtConn := g.GetConn(c.tgtDB)
@@ -174,14 +222,18 @@ func runInToDB(c Config) {
 	stream, err := csv.ReadStream()
 	g.LogErrorExit(err)
 
+	tgtConn.SetProp("s3Bucket", c.s3Bucket)
+
+	c.tgtTableTmp = c.tgtTable + g.RandString("alpha", 3)
+
 	if c.drop {
 		d := g.Dataset{Columns: stream.Columns, Rows: stream.Buffer}
-		newDdl, err := tgtConn.GenerateDDL(c.tgtTable, d)
+		c.tgtTableDDL, err = tgtConn.GenerateDDL(c.tgtTable, d)
 
 		err = tgtConn.DropTable(c.tgtTable)
 		g.LogErrorExit(err)
 
-		_, err = tgtConn.Db().Exec(newDdl)
+		_, err = tgtConn.Db().Exec(c.tgtTableDDL)
 		g.LogErrorExit(err)
 		g.Log("(re)created table " + c.tgtTable)
 	} else if c.truncate {
@@ -237,14 +289,16 @@ func runDbToDb(c Config) {
 	stream, err := srcConn.BulkStream(sql)
 	g.LogErrorExit(err)
 
+	c.tgtTableTmp = c.tgtTable + g.RandString("alpha", 3)
+
 	if c.drop {
 		d := g.Dataset{Columns: stream.Columns, Rows: stream.Buffer}
-		newDdl, err := tgtConn.GenerateDDL(c.tgtTable, d)
+		c.tgtTableDDL, err = tgtConn.GenerateDDL(c.tgtTable, d)
 
 		err = tgtConn.DropTable(c.tgtTable)
 		g.LogErrorExit(err)
 
-		_, err = tgtConn.Db().Exec(newDdl)
+		_, err = tgtConn.Db().Exec(c.tgtTableDDL)
 		g.LogErrorExit(err)
 		g.Log("created table " + c.tgtTable)
 	} else if c.truncate {
