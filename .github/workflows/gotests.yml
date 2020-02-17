@@ -31,6 +31,21 @@ jobs:
           MYSQL_PASSWORD: "mysql"
         ports:
           - 3306:3306
+      
+      oracle:
+        image: wnameless/oracle-xe-11g
+        env:
+          ORACLE_ALLOW_REMOTE: "true"
+        ports:
+          - 1521:1521
+      
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2017-latest
+        env:
+          ACCEPT_EULA: "Y"
+          SA_PASSWORD: "mssql"
+        ports:
+          - 1433:1433
 
     steps:
     - uses: actions/checkout@v1
@@ -52,6 +67,8 @@ jobs:
         POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
         POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable
         MYSQL_URL: mysql://mysql:mysql@localhost:3306/mysql
+        ORACLE_URL: oracle://system:oracle@localhost:1521/xe
+        MSSQL_URL: sqlserver://sa:mssql@localhost:1433/master
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         S3_REGION: ${{ secrets.S3_REGION }}
