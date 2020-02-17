@@ -147,6 +147,9 @@ func getDriverName(name string) (driverName string) {
 	if driverName == "oracle" {
 		driverName = "godror"
 	}
+	if driverName == "sqlserver" {
+		driverName = "mssql"
+	}
 	return
 }
 
@@ -416,7 +419,7 @@ func (conn *BaseConn) StreamRecords(sql string) (<-chan map[string]interface{}, 
 			rec := map[string]interface{}{}
 			err := result.MapScan(rec)
 			if err != nil {
-				Check(err, "MapScan(rec)")
+				LogError(err)
 				close(chnl)
 			}
 
@@ -471,7 +474,7 @@ func (conn *BaseConn) StreamRows(sql string) (ds Datastream, err error) {
 			// add row
 			row, err := result.SliceScan()
 			if err != nil {
-				Check(err, "MapScan(rec)")
+				LogError(err)
 				break
 			}
 			row = processRow(row)

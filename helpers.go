@@ -202,7 +202,7 @@ func LogCCyan(text string) { LogC(text, "cyan", os.Stderr) }
 // LogError handles logging of an error, useful for reporting
 func LogError(E error) {
 	if E != nil {
-		LogCRedErr(E.Error())
+		LogCRedErr(Propagate(E, E.Error()).Error())
 	}
 }
 
@@ -210,7 +210,7 @@ func LogError(E error) {
 func LogErrorExit(E error) {
 	if E != nil {
 		LogCRedErr(E.Error())
-		log.Fatal(E)
+		log.Fatal(Propagate(E, E.Error()))
 	}
 }
 
