@@ -67,6 +67,30 @@ var DBs = []*testDB{
 		placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
 		placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
 	},
+	// &testDB{
+	// 	name: "MySQL",
+	// 	URL:  os.Getenv("MYSQL_URL"),
+	// 	viewDDL: `create view place_vw as select * from place where telcode = 65`,
+	// 	schema:     "main",
+	// 	placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
+	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
+	// },
+	// &testDB{
+	// 	name: "MS SQL Server",
+	// 	URL:  os.Getenv("MSSQL_URL"),
+	// 	viewDDL: `create view place_vw as select * from place where telcode = 65`,
+	// 	schema:     "main",
+	// 	placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
+	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
+	// },
+	// &testDB{
+	// 	name: "Oracle",
+	// 	URL:  os.Getenv("ORACLE_URL"),
+	// 	viewDDL: `create view place_vw as select * from place where telcode = 65`,
+	// 	schema:     "system",
+	// 	placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
+	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
+	// },
 }
 
 func init() {
@@ -77,7 +101,8 @@ func init() {
 			os.Remove(strings.ReplaceAll(db.URL, "file:", ""))
 		}
 		db.conn = GetConn(db.URL)
-		db.conn.Connect()
+		err := db.conn.Connect()
+		LogErrorExit(err)
 	}
 }
 
@@ -97,7 +122,7 @@ func DBTest(t *testing.T, db *testDB) {
 	gConn, err := conn.GetGormConn()
 	assert.NoError(t, err)
 
-	err = conn.DropTable("person", "place", "transactions")
+	err = conn.DropTable(db.schema + ".person", db.schema + ".place", db.schema + ".transactions")
 	assert.NoError(t, err)
 
 	// conn.Db().MustExec(tablesDDL)

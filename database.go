@@ -11,18 +11,21 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/denisenkom/go-mssqldb"
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/godror/godror"
 	"github.com/jinzhu/gorm"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/markbates/pkger"
 	_ "github.com/mattn/go-sqlite3"
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/spf13/cast"
 	"gopkg.in/yaml.v2"
 )
 
 // Connection is the Base interface for Connections
 type Connection interface {
+	Init() error
 	Connect() error
 	Close() error
 	GetGormConn() (*gorm.DB, error)
@@ -39,6 +42,7 @@ type Connection interface {
 	Template() *Template
 	SetProp(string, string)
 	GetProp(string) string
+	GetTemplateValue(path string) (value string)
 
 	StreamRecords(sql string) (<-chan map[string]interface{}, error)
 	GetSchemata(string) (Schema, error)
@@ -104,6 +108,7 @@ type Template struct {
 	Function       map[string]string
 	GeneralTypeMap map[string]string `yaml:"general_type_map"`
 	NativeTypeMap  map[string]string `yaml:"native_type_map"`
+	Variable       map[string]string
 }
 
 // GetConn return the most proper connection for a given database
@@ -116,13 +121,39 @@ func GetConn(URL string) Connection {
 		} else {
 			conn = &PostgresConn{URL: URL}
 		}
+	} else if strings.HasPrefix(URL, "mysql:") {
+		conn = &MySQLConn{URL: URL}
+	} else if strings.HasPrefix(URL, "sqlserver:") {
+		conn = &BaseConn{URL: URL, Type: "sqlserver"}
+	} else if strings.HasPrefix(URL, "oracle:") {
+		conn = &OracleConn{URL: URL}
 	} else if strings.HasPrefix(URL, "file:") {
 		conn = &BaseConn{URL: URL, Type: "sqlite3"}
 	} else {
 		conn = &BaseConn{URL: URL}
 	}
 
+	// Init
+	conn.Init()
+
 	return conn
+}
+
+func getDriverName(name string) (driverName string) {
+	driverName = name
+	if driverName == "redshift" {
+		driverName = "postgres"
+	}
+	if driverName == "oracle" {
+		driverName = "godror"
+	}
+	return
+}
+
+// Init initiates the connection object
+func (conn *BaseConn) Init() (err error) {
+	conn.LoadYAML()
+	return nil
 }
 
 // Db returns the sqlx db object
@@ -147,6 +178,9 @@ func (conn *BaseConn) GetProp(key string) string {
 
 // SetProp sets the value of a property
 func (conn *BaseConn) SetProp(key string, val string) {
+	if conn.properties == nil {
+		conn.properties = map[string]string{}
+	}
 	conn.properties[key] = val
 }
 
@@ -163,12 +197,7 @@ func (conn *BaseConn) Connect() error {
 
 	conn.LoadYAML()
 
-	Type := conn.Type
-	if Type == "redshift" {
-		Type = "postgres"
-	}
-
-	db, err := sqlx.Open(Type, conn.URL)
+	db, err := sqlx.Open(getDriverName(conn.Type), conn.URL)
 	if err != nil {
 		return Error(err, "Could not connect to DB")
 	}
@@ -192,7 +221,31 @@ func (conn *BaseConn) Close() error {
 
 // GetGormConn returns the gorm db connection
 func (conn *BaseConn) GetGormConn() (*gorm.DB, error) {
-	return gorm.Open(conn.Type, conn.URL)
+	return gorm.Open(getDriverName(conn.Type), conn.URL)
+}
+
+// GetTemplateValue returns the value of the path
+func (conn *BaseConn) GetTemplateValue(path string) (value string) {
+
+	prefixes := map[string]map[string]string{
+		"core.":             conn.template.Core,
+		"analysis.":         conn.template.Analysis,
+		"function.":         conn.template.Function,
+		"metadata.":         conn.template.Metadata,
+		"general_type_map.": conn.template.GeneralTypeMap,
+		"native_type_map.":  conn.template.NativeTypeMap,
+		"variable.":         conn.template.Variable,
+	}
+
+	for prefix, dict := range prefixes {
+		if strings.HasPrefix(path, prefix) {
+			key := strings.Replace(path, prefix, "", 1)
+			value = dict[key]
+			break
+		}
+	}
+
+	return value
 }
 
 // LoadYAML loads the approriate yaml template
@@ -204,6 +257,7 @@ func (conn *BaseConn) LoadYAML() error {
 		Function:       map[string]string{},
 		GeneralTypeMap: map[string]string{},
 		NativeTypeMap:  map[string]string{},
+		Variable:      map[string]string{},
 	}
 
 	_, filename, _, _ := runtime.Caller(1)
@@ -261,6 +315,10 @@ func (conn *BaseConn) LoadYAML() error {
 
 	for key, val := range template.NativeTypeMap {
 		conn.template.NativeTypeMap[key] = val
+	}
+
+	for key, val := range template.Variable {
+		conn.template.Variable[key] = val
 	}
 
 	return nil
@@ -551,8 +609,13 @@ func (conn *BaseConn) DropTable(tableNames ...string) (err error) {
 		sql := R(conn.template.Core["drop_table"], "table", tableName)
 		_, err = conn.Query(sql)
 		if err != nil {
-			return Error(err, "Error for "+sql)
-		}
+			errIgnoreWord := conn.template.Variable["error_ignore_drop"]
+			if !(errIgnoreWord != "" && strings.Contains(cast.ToString(err), errIgnoreWord)) {
+				return Error(err, "Error for "+sql)
+			 }else {
+				Log(F("table %s does not exist", tableName))
+			}
+		} 
 	}
 	return nil
 }
@@ -645,7 +708,7 @@ func (conn *BaseConn) RunAnalysisTable(analysisName string, tableFNames ...strin
 	for _, tableFName := range tableFNames {
 		schema, table := splitTableFullName(tableFName)
 		sql := R(
-			conn.template.Analysis[analysisName],
+			conn.GetTemplateValue("analysis."+analysisName),
 			"schema", schema,
 			"table", table,
 		)

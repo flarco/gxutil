@@ -6,11 +6,12 @@ require (
 	github.com/DataDog/zstd v1.4.4 // indirect
 	github.com/apache/thrift v0.13.0 // indirect
 	github.com/aws/aws-sdk-go v1.25.36
-	github.com/denisenkom/go-mssqldb v0.0.0-20191001013358-cfbb681360f0 // indirect
+	github.com/denisenkom/go-mssqldb v0.0.0-20191001013358-cfbb681360f0
 	github.com/dustin/go-humanize v1.0.0
 	github.com/fatih/color v1.7.0
 	github.com/flarco/stacktrace v0.0.0-20190606122717-05f59122ae1a
 	github.com/go-sql-driver/mysql v1.5.0
+	github.com/godror/godror v0.12.0
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/integrii/flaggy v1.4.3
 	github.com/jinzhu/gorm v1.9.11

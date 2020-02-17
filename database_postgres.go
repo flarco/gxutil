@@ -13,17 +13,17 @@ import (
 // PostgresConn is a Postgres connection
 type PostgresConn struct {
 	BaseConn
-	URL string
+	URL  string
 }
 
-// Connect connects to a database using sqlx
-func (conn *PostgresConn) Connect() error {
-
+// Init initiates the object
+func (conn *PostgresConn) Init() error {
 	conn.BaseConn = BaseConn{
 		URL:  conn.URL,
 		Type: "postgres",
 	}
-	return conn.BaseConn.Connect()
+
+	return conn.BaseConn.LoadYAML()
 }
 
 // CopyToStdout Copy TO STDOUT

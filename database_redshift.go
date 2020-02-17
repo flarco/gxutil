@@ -16,17 +16,18 @@ import (
 // RedshiftConn is a Redshift connection
 type RedshiftConn struct {
 	BaseConn
-	URL string
+	URL  string
 }
 
-// Connect connects to a database using sqlx
-func (conn *RedshiftConn) Connect() error {
 
+// Init initiates the object
+func (conn *RedshiftConn) Init() error {
 	conn.BaseConn = BaseConn{
 		URL:  conn.URL,
 		Type: "redshift",
 	}
-	return conn.BaseConn.Connect()
+
+	return conn.BaseConn.LoadYAML()
 }
 
 func isRedshift(URL string) (isRs bool) {

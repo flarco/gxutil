@@ -6,15 +6,14 @@ type MySQLConn struct {
 	URL string
 }
 
-// Connect connects to a database using sqlx
-func (conn *MySQLConn) Connect() error {
-
+// Init initiates the object
+func (conn *MySQLConn) Init() error {
 	conn.BaseConn = BaseConn{
 		URL:  conn.URL,
 		Type: "mysql",
 	}
-	
-	return conn.BaseConn.Connect()
+
+	return conn.BaseConn.LoadYAML()
 }
 
 // InsertStream inserts a stream into a table
