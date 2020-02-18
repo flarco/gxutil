@@ -1,5 +1,6 @@
 core:
   drop_table: drop table if exists {table} cascade
+  drop_view: drop view if exists {view}
   replace: insert into {table} ({names}) values ({values}) on conflict ({pk_fields}) do update set {set_fields}
   replace_temp: |
     insert into {table} ({names})

@@ -21,73 +21,90 @@ core:
     from dual
 
 metadata:
-  all_tables: |
-    with tables as (
-      select
-        owner,
-        table_name,
-        num_rows,
-        last_analyzed
-      from sys.all_tables
-    )
+  schemas: |
+    select username
+    from sys.all_users
+    order by username
+  
+  tables: |
+    select table_name
+    from sys.all_tables
+    where owner = upper('{schema}')
+    order by table_name
+    
+  views: |
+    select view_name
+    from sys.all_views
+    where owner = upper('{schema}')
+    order by view_name
+
+  columns: |
+    select column_name, data_type
+    from sys.all_tab_columns
+    where owner = upper('{schema}')
+      and table_name = upper('{table}')
+    order by column_id
+
+  primary_keys: |
+    SELECT
+      cons.constraint_name as pk_name,
+      cols.position as position,
+      cols.column_name as column_name
+    FROM all_constraints cons, all_cons_columns cols
+    WHERE cons.owner = upper('{schema}')
+      and cols.table_name = upper('{table}')
+      and cons.constraint_type = 'P'
+      and cons.constraint_name = cols.constraint_name
+      and cons.owner = cols.owner
+    ORDER BY cons.owner, cols.table_name, cols.position
+
+
+  indexes: |
+    select
+      index_name,
+      column_name
+    from all_ind_columns
+    where index_owner = upper('{schema}')
+      and table_name = upper('{table}')
+    order by index_name, column_position
+
+  ddl_view: |
+    select text as ddl
+    from sys.all_views
+    where owner = upper('{schema}')
+      and view_name = upper('{table}')
+
+  ddl_table: |
+    select dbms_metadata.get_ddl('TABLE', upper('{table}'), upper('{schema}')) as ddl from dual
+  
+  columns_full: |
     select
       col.owner as schema_name,
       col.table_name as table_name,
-      case
-        when tables.table_name is null then 'VIEW'
-        else 'TABLE'
-      end as table_type,
-      count(col.column_name) as num_columns,
-      tables.num_rows as num_rows,
-      tables.last_analyzed
-    from sys.all_tab_columns col 
-    left join tables
-      on tables.owner = col.owner
-      and tables.table_name = col.table_name
-    group by
-      col.owner,
-      col.table_name, 
-      case
-        when tables.table_name is null then 'VIEW'
-        else 'TABLE'
-      end,
-      tables.num_rows,
-      tables.last_analyzed
-    order by col.owner, col.table_name
-  all_columns: |
-    with tables as (
-      select
-        owner,
-        table_name,
-        num_rows
-      from sys.all_tables
-    )
-    select
-      col.owner as schema_name,
-      col.table_name as table_name,
-      case
-        when tables.table_name is null then 'VIEW'
-        else 'TABLE'
-      end as table_type,
       col.column_name as column_name,
-      col.data_type as column_type,
-      col.column_id as column_id,
-      col.num_distinct as num_distinct,
-      col.num_nulls as num_nulls,
-      tables.num_rows as num_rows,
-      case
-        when tables.num_rows = 0 then null
-        else col.num_distinct / tables.num_rows
-      end as prct_distinct,
-      case
-        when tables.num_rows = 0 then null
-        else col.num_nulls / tables.num_rows
-      end as prct_nulls,
-      col.last_analyzed
+      col.data_type as data_type,
+      col.column_id as position
     from sys.all_tab_columns col 
-    left join tables
-      on tables.owner = col.owner
-      and tables.table_name = col.table_name
+    where owner = upper('{schema}')
+      and table_name = upper('{table}')
+    order by col.owner, col.table_name, col.column_id
+
+  schemata: |
+    select
+      col.owner as schema_name,
+      col.table_name as table_name,
+      case
+        when views.view_name is null then 'false'
+        else 'true'
+      end as is_view,
+      col.column_name as column_name,
+      col.data_type as data_type,
+      col.column_id as position
+    from sys.all_tab_columns col 
+    left join sys.all_views views
+      on views.owner = col.owner
+      and views.view_name = col.table_name
+    where col.owner = upper('{schema}')
     order by col.owner, col.table_name, col.column_id
 
 analysis:
@@ -189,12 +206,15 @@ native_type_map:
 general_type_map:
   string: "varchar2()"
   integer: "number()"
-  decimal: "number()"
+  decimal: "number(,)"
   date: "date"
   datetime: "date"
-  timestamp: "date"
+  timestamp: "timestamp"
   text: "nclob"
+  bool: "varchar2(10)"  # Oracle does not have boolean type (only in PL/SQL)
 
 # extra variables
 variable:
-  error_ignore_drop: "ORA-00942"
+  error_ignore_drop_table: "ORA-00942"
+  error_ignore_drop_view: "ORA-00942"
+  bind_string: ":{field}"

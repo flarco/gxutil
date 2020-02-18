@@ -103,7 +103,7 @@ func toString(val interface{}) string {
 func castVal(val interface{}, typ string) interface{} {
 	var nVal interface{}
 	switch typ {
-	case "string":
+	case "string", "text":
 		nVal = cast.ToString(val)
 	case "integer":
 		nVal = cast.ToInt64(val)
@@ -111,8 +111,8 @@ func castVal(val interface{}, typ string) interface{} {
 		nVal = cast.ToFloat64(val)
 	case "bool":
 		nVal = cast.ToBool(val)
-	// case "datetime":
-	// 	nVal = cast.ToTime(val)
+	case "datetime", "date", "timestamp":
+		nVal = cast.ToTime(val)
 	default:
 		nVal = cast.ToString(val)
 	}

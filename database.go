@@ -13,7 +13,7 @@ import (
 
 	_ "github.com/denisenkom/go-mssqldb"
 	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/godror/godror"
+	"github.com/godror/godror"
 	"github.com/jinzhu/gorm"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -36,8 +36,9 @@ type Connection interface {
 	BulkStream(sql string) (Datastream, error)
 	Query(sql string) (Dataset, error)
 	GenerateDDL(tableFName string, data Dataset) (string, error)
-	GetDDL(string) (string, error)
+	GenerateInsertStatement(tableName string, fields []string) string
 	DropTable(...string) error
+	DropView(...string) error
 	InsertStream(tableFName string, ds Datastream) (count uint64, err error)
 	Db() *sqlx.DB
 	Schemata() *Schemata
@@ -46,7 +47,9 @@ type Connection interface {
 	GetProp(string) string
 	GetTemplateValue(path string) (value string)
 
+	bindVar(i int, field string) string
 	StreamRecords(sql string) (<-chan map[string]interface{}, error)
+	GetDDL(string) (string, error)
 	GetSchemata(string) (Schema, error)
 	GetSchemas() (Dataset, error)
 	GetTables(string) (Dataset, error)
@@ -78,6 +81,7 @@ type Column struct {
 	Position int64  `json:"position"`
 	Name     string `json:"name"`
 	Type     string `json:"type"`
+	stats    ColumnStats
 	colType  *sql.ColumnType
 }
 
@@ -358,7 +362,9 @@ func processVal(val interface{}) interface{} {
 	case float32:
 		nVal = cast.ToFloat32(val)
 	case float64:
-		nVal = cast.ToFloat64(val)
+		nVal = cast.ToString(val)
+	case godror.Number:
+		nVal = ParseString(cast.ToString(val))
 	case bool:
 		nVal = cast.ToBool(val)
 	case []uint8:
@@ -376,6 +382,7 @@ func processVal(val interface{}) interface{} {
 	default:
 		nVal = cast.ToString(val)
 		_ = fmt.Sprint(v)
+		// fmt.Printf("%T\n", val)
 	}
 	return nVal
 
@@ -602,7 +609,12 @@ func (conn *BaseConn) GetDDL(tableFName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return data.Rows[0][0].(string), nil
+
+	if len(data.Rows) == 0 {
+		return "", nil
+	}
+
+	return cast.ToString(data.Rows[0][0]), nil
 }
 
 func getMetadataTableFName(conn *BaseConn, template string, tableFName string) string {
@@ -622,7 +634,7 @@ func (conn *BaseConn) DropTable(tableNames ...string) (err error) {
 		sql := R(conn.template.Core["drop_table"], "table", tableName)
 		_, err = conn.Query(sql)
 		if err != nil {
-			errIgnoreWord := conn.template.Variable["error_ignore_drop"]
+			errIgnoreWord := conn.template.Variable["error_ignore_drop_table"]
 			if !(errIgnoreWord != "" && strings.Contains(cast.ToString(err), errIgnoreWord)) {
 				return Error(err, "Error for "+sql)
 			} else {
@@ -630,6 +642,26 @@ func (conn *BaseConn) DropTable(tableNames ...string) (err error) {
 			}
 		} else {
 			log.Debug(F("table %s dropped", tableName))
+		}
+	}
+	return nil
+}
+
+// DropView drops given view.
+func (conn *BaseConn) DropView(viewNames ...string) (err error) {
+
+	for _, viewName := range viewNames {
+		sql := R(conn.template.Core["drop_view"], "view", viewName)
+		_, err = conn.Query(sql)
+		if err != nil {
+			errIgnoreWord := conn.template.Variable["error_ignore_drop_view"]
+			if !(errIgnoreWord != "" && strings.Contains(cast.ToString(err), errIgnoreWord)) {
+				return Error(err, "Error for "+sql)
+			} else {
+				log.Debug(F("view %s does not exist", viewName))
+			}
+		} else {
+			log.Debug(F("view %s dropped", viewName))
 		}
 	}
 	return nil
@@ -658,15 +690,22 @@ func (conn *BaseConn) GetSchemata(schemaName string) (Schema, error) {
 	schema.Name = schemaName
 
 	for _, rec := range schemaData.Records() {
-		tableName := rec["table_name"].(string)
+		tableName := cast.ToString(rec["table_name"])
 
 		switch v := rec["is_view"].(type) {
 		case int64:
-			if rec["is_view"].(int64) == 0 {
+			if cast.ToInt64(rec["is_view"]) == 0 {
 				rec["is_view"] = false
 			} else {
 				rec["is_view"] = true
 			}
+		case string:
+			if strings.ToLower(cast.ToString(rec["is_view"])) == "true"  {
+				rec["is_view"] = true
+			} else {
+				rec["is_view"] = false
+			}
+
 		default:
 			_ = fmt.Sprint(v)
 			_ = rec["is_view"]
@@ -674,7 +713,7 @@ func (conn *BaseConn) GetSchemata(schemaName string) (Schema, error) {
 
 		table := Table{
 			Name:       tableName,
-			IsView:     rec["is_view"].(bool),
+			IsView:     cast.ToBool(rec["is_view"]),
 			Columns:    []Column{},
 			ColumnsMap: map[string]*Column{},
 		}
@@ -684,9 +723,9 @@ func (conn *BaseConn) GetSchemata(schemaName string) (Schema, error) {
 		}
 
 		column := Column{
-			Position: rec["position"].(int64),
-			Name:     rec["column_name"].(string),
-			Type:     rec["data_type"].(string),
+			Position: cast.ToInt64(rec["position"]),
+			Name:     cast.ToString(rec["column_name"]),
+			Type:     cast.ToString(rec["data_type"]),
 		}
 
 		table.Columns = append(table.Columns, column)
@@ -748,7 +787,7 @@ func (conn *BaseConn) RunAnalysisField(analysisName string, tableFName string, f
 		}
 
 		for _, rec := range result.Records() {
-			fields = append(fields, rec["column_name"].(string))
+			fields = append(fields, cast.ToString(rec["column_name"]))
 		}
 	}
 
@@ -781,8 +820,8 @@ func (conn *BaseConn) InsertBatchStream(tableFName string, columns []string, str
 
 	values := make([]string, len(columns))
 	placeholders := make([]string, len(columns))
-	for i := 0; i < len(columns); i++ {
-		values[i] = F("$%d", i+1)
+	for i, field := range columns {
+		values[i] = conn.bindVar(i+1, field)
 		placeholders[i] = "?"
 	}
 
@@ -837,21 +876,43 @@ func (conn *BaseConn) InsertBatchStream(tableFName string, columns []string, str
 	return nil
 }
 
+// bindVar return proper bind var according to https://jmoiron.github.io/sqlx/#bindvars
+func (conn *BaseConn) bindVar(i int, field string) string {
+	return R(
+		conn.template.Variable["bind_string"],
+		"i", cast.ToString(i),
+		"field", field,
+	)
+}
+
+func (conn *BaseConn) quote(i int, field string) string {
+	q := conn.template.Variable["quote_string"]
+	return q + field + q
+}
+
+// GenerateInsertStatement returns the proper INSERT statement
+func (conn *BaseConn) GenerateInsertStatement(tableName string, fields []string) string {
+
+	values := make([]string, len(fields))
+	qFields := make([]string, len(fields)) // quoted fields
+
+	for i, field := range fields {
+		values[i] = conn.bindVar(i+1, field)
+		qFields[i] = "\"" + field + "\""
+	}
+
+	return R(
+		"INSERT INTO {table} ({fields}) VALUES ({values})",
+		"table", tableName,
+		"fields", strings.Join(fields, ", "),
+		"values", strings.Join(values, ", "),
+	)
+}
+
 // InsertStream inserts a stream into a table
 func (conn *BaseConn) InsertStream(tableFName string, ds Datastream) (count uint64, err error) {
 
-	fields := ds.GetFields()
-	values := make([]string, len(fields))
-	for i := 0; i < len(fields); i++ {
-		values[i] = F("$%d", i+1)
-	}
-
-	insertTemplate := R(
-		"INSERT INTO {table} ({columns}) VALUES ({values})",
-		"table", tableFName,
-		"columns", strings.Join(fields, ", "),
-		"values", strings.Join(values, ", "),
-	)
+	insertTemplate := conn.GenerateInsertStatement(tableFName, ds.GetFields())
 
 	tx := conn.db.MustBegin()
 	for row := range ds.Rows {
@@ -860,7 +921,10 @@ func (conn *BaseConn) InsertStream(tableFName string, ds Datastream) (count uint
 		_, err := tx.Exec(insertTemplate, row...)
 		if err != nil {
 			tx.Rollback()
-			return count, err
+			return count, Error(
+				err,
+				F("Insert: %s\nFor Row: %#v", insertTemplate, row),
+			)
 		}
 	}
 	tx.Commit()
@@ -876,14 +940,8 @@ func (conn *BaseConn) GenerateDDL(tableFName string, data Dataset) (string, erro
 
 	for _, col := range data.Columns {
 		// convert from general type to native type
-		if _, ok := conn.template.GeneralTypeMap[col.Type]; ok {
-			columnDDL := F(
-				"%s %s",
-				col.Name,
-				conn.template.GeneralTypeMap[col.Type],
-			)
-			columnsDDL = append(columnsDDL, columnDDL)
-		} else {
+		nativeType, ok := conn.template.GeneralTypeMap[col.Type]
+		if !ok {
 			return "", errors.New(
 				F(
 					"No type mapping defined for '%s' for '%s'",
@@ -892,6 +950,53 @@ func (conn *BaseConn) GenerateDDL(tableFName string, data Dataset) (string, erro
 				),
 			)
 		}
+
+		// Add precision as needed
+		if strings.HasSuffix(nativeType, "()") {
+			length := col.stats.maxLen*2
+			if col.Type == "string" {
+				if length < 255 {
+					length = 255
+				}
+				nativeType = strings.ReplaceAll(
+					nativeType,
+					"()",
+					F("(%d)", length),
+				)
+			} else if col.Type == "integer" {
+				if length < 10 {
+					length = 10
+				}
+				nativeType = strings.ReplaceAll(
+					nativeType,
+					"()",
+					F("(%d)", length),
+				)
+			}
+		} else if strings.HasSuffix(nativeType, "(,)") {
+			length := col.stats.maxLen*2
+			scale := col.stats.maxDecLen*2
+			if col.Type == "decimal" {
+				if length < 10 {
+					length = 10
+				}
+				if scale < 4 {
+					scale = 4
+				}
+				nativeType = strings.ReplaceAll(
+					nativeType,
+					"(,)",
+					F("(%d,%d)", length, scale),
+				)
+			}
+		}
+
+		columnDDL := F(
+			"%s %s",
+			col.Name,
+			nativeType,
+		)
+		columnsDDL = append(columnsDDL, columnDDL)
 	}
 
 	ddl := R(

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cast"
 	"github.com/stretchr/testify/assert"
 	// "github.com/gobuffalo/packr"
 )
@@ -28,8 +29,8 @@ type place struct {
 	Telcode int64  `json:"telcode"`
 }
 
-type transactions struct {
-	Date                time.Time `json:"date" `
+type transact struct {
+	Datetime            time.Time `json:"date" `
 	Description         string    `json:"description"`
 	OriginalDescription string    `json:"original_description"`
 	Amount              float64   `json:"amount"`
@@ -41,32 +42,41 @@ type transactions struct {
 }
 
 type testDB struct {
-	conn       Connection
-	name       string
-	URL        string
-	viewDDL    string
-	schema     string
-	placeDDL   string
-	placeVwDDL string
+	conn          Connection
+	name          string
+	URL           string
+	schema        string
+	transactDDL   string
+	personDDL     string
+	placeDDL      string
+	placeIndex    string
+	placeVwDDL    string
+	placeVwSelect string
 }
 
 var DBs = []*testDB{
-	&testDB{
-		name:       "postgres",
-		URL:        os.Getenv("POSTGRES_URL"),
-		viewDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
-		schema:     "public",
-		placeDDL:   "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
-		placeVwDDL: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
-	},
-	&testDB{
-		name: "sqlilte3",
-		URL:  "file:./test.db",
-		viewDDL: `create view place_vw as select * from place where telcode = 65`,
-		schema:     "main",
-		placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
-		placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
-	},
+	// &testDB{
+	// 	name:       "postgres",
+	// 	URL:        os.Getenv("POSTGRES_URL"),
+	// 	schema:     "public",
+	// 	transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+	// 	personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+	// 	placeDDL:   "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
+	// 	placeIndex:    `CREATE INDEX idx_country_city
+	// 	ON place(country, city)`,
+	// 	placeVwDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
+	// 	placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
+	// },
+
+	// &testDB{
+	// 	name: "sqlilte3",
+	// 	URL:  "file:./test.db",
+	// 	viewDDL: `create view place_vw as select * from place where telcode = 65`,
+	// 	schema:     "main",
+	// 	placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
+	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
+	// },
+
 	// &testDB{
 	// 	name: "MySQL",
 	// 	URL:  os.Getenv("MYSQL_URL"),
@@ -75,6 +85,7 @@ var DBs = []*testDB{
 	// 	placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
 	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
 	// },
+
 	// &testDB{
 	// 	name: "sqlserver",
 	// 	URL:  os.Getenv("MSSQL_URL"),
@@ -83,14 +94,19 @@ var DBs = []*testDB{
 	// 	placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
 	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
 	// },
-	// &testDB{
-	// 	name: "oracle",
-	// 	URL:  os.Getenv("ORACLE_URL"),
-	// 	viewDDL: `create view place_vw as select * from place where telcode = 65`,
-	// 	schema:     "system",
-	// 	placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
-	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
-	// },
+
+	&testDB{
+		name:        "oracle",
+		URL:         os.Getenv("ORACLE_URL"),
+		schema:      "system",
+		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+		placeDDL:    "\n  CREATE TABLE \"SYSTEM\".\"PLACE\" \n   (\t\"COUNTRY\" VARCHAR2(255), \n\t\"CITY\" VARCHAR2(255), \n\t\"TELCODE\" NUMBER(*,0)\n   ) PCTFREE 10 PCTUSED 40 INITRANS 1 MAXTRANS 255 NOCOMPRESS LOGGING\n  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645\n  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)\n  TABLESPACE \"SYSTEM\" ",
+		placeIndex: `CREATE INDEX idx_country_city 
+		ON place(country, city)`,
+		placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
+		placeVwSelect: "select \"COUNTRY\",\"CITY\",\"TELCODE\" from place where telcode = 65",
+	},
 }
 
 func init() {
@@ -119,25 +135,36 @@ func DBTest(t *testing.T, db *testDB) {
 	println("Testing " + db.name)
 
 	conn := db.conn
-	gConn, err := conn.GetGormConn()
+
+	err := conn.DropTable(db.schema+".person", db.schema+".place", db.schema+".transact")
 	assert.NoError(t, err)
 
-	err = conn.DropTable(db.schema + ".person", db.schema + ".place", db.schema + ".transactions")
+	err = conn.DropView(db.schema + ".place_vw")
 	assert.NoError(t, err)
 
-	// conn.Db().MustExec(tablesDDL)
-	gConn.SingularTable(true)
-	gConn.AutoMigrate(&person{}, &place{}, &transactions{})
-	conn.Db().MustExec(db.viewDDL)
+	// gConn, err := conn.GetGormConn()
+	// assert.NoError(t, err)
+	// gConn.SingularTable(true)
+	// gConn.AutoMigrate(&person{}, &place{}, &transact{})
+
+	conn.Db().MustExec(db.transactDDL)
+	conn.Db().MustExec(db.personDDL)
+	conn.Db().MustExec(db.placeDDL)
+	conn.Db().MustExec(db.placeIndex)
+	conn.Db().MustExec(db.placeVwDDL)
+
+	personInsertStatement := conn.GenerateInsertStatement("person", []string{"first_name", "last_name", "email"})
+	placeInsertStatement := conn.GenerateInsertStatement("place", []string{"country", "city", "telcode"})
+	transactInsertStatement := conn.GenerateInsertStatement("transact", []string{"date_time", "description", "amount"})
 
 	tx := conn.Db().MustBegin()
-	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "Jason", "Moiron", "jmoiron@jmoiron.net")
-	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "John", "Doe", "johndoeDNE@gmail.net")
-	tx.MustExec("INSERT INTO place (country, city, telcode) VALUES ($1, $2, $3)", "United States", "New York", "1")
-	tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Hong Kong", "852")
-	tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Singapore", "65")
-	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2019-10-10", "test\" \nproduct", "65.657")
-	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2020-10-10", "new \nproduct", "5.657")
+	tx.MustExec(personInsertStatement, "Jason", "Moiron", "jmoiron@jmoiron.net")
+	tx.MustExec(personInsertStatement, "John", "Doe", "johndoeDNE@gmail.net")
+	tx.MustExec(placeInsertStatement, "United States", "New York", "1")
+	tx.MustExec(placeInsertStatement, "Hong Kong", nil, "852")
+	tx.MustExec(placeInsertStatement, "Singapore", nil, "65")
+	tx.MustExec(transactInsertStatement, cast.ToTime("2019-10-10"), "test\" \nproduct", 65.657)
+	tx.MustExec(transactInsertStatement, cast.ToTime("2020-10-10"), "new \nproduct", 5.657)
 	tx.Commit()
 
 	// Test Streaming
@@ -167,10 +194,10 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
 
-	data, err = conn.Query(`select * from transactions`)
+	data, err = conn.Query(`select * from transact`)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, 65.657, data.Records()[0]["amount"])
+	assert.Equal(t, 65.657, cast.ToFloat64(data.Records()[0]["amount"]))
 
 	// GetSchemas
 	data, err = conn.GetSchemas()
@@ -183,7 +210,7 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.Greater(t, len(data.Rows), 0)
 
 	// GetViews
-	data, err = conn.GetViews("information_schema")
+	data, err = conn.GetViews(db.schema)
 	assert.NoError(t, err)
 	assert.Greater(t, len(data.Rows), 0)
 	assert.Greater(t, data.Duration, 0.0)
@@ -192,25 +219,25 @@ func DBTest(t *testing.T, db *testDB) {
 	data, err = conn.GetColumns(db.schema + ".person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Contains(t, []string{"text", "varchar(255)"}, data.Records()[0]["data_type"])
+	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2"}, data.Records()[0]["data_type"])
 
 	// GetPrimarkKeys
 	data, err = conn.GetPrimarkKeys(db.schema + ".person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 1)
-	assert.Equal(t, "first_name", data.Records()[0]["column_name"])
+	assert.Equal(t, "first_name", strings.ToLower(cast.ToString(data.Records()[0]["column_name"])))
 
 	// GetIndexes
 	data, err = conn.GetIndexes(db.schema + ".place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, "city", data.Records()[1]["column_name"])
+	assert.Equal(t, "city", strings.ToLower(cast.ToString(data.Records()[1]["column_name"])))
 
 	// GetColumnsFull
 	data, err = conn.GetColumnsFull(db.schema + ".place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, "bigint", data.Records()[2]["data_type"])
+	assert.Contains(t, []string{"bigint", "NUMBER"}, data.Records()[2]["data_type"])
 
 	// GetDDL of table
 	ddl, err := conn.GetDDL(db.schema + ".place")
@@ -220,7 +247,7 @@ func DBTest(t *testing.T, db *testDB) {
 	// GetDDL of view
 	ddl, err = conn.GetDDL(db.schema + ".place_vw")
 	assert.NoError(t, err)
-	assert.Equal(t, db.placeVwDDL, ddl)
+	assert.Equal(t, db.placeVwSelect, ddl)
 
 	// load Csv from test file
 	csv1 := CSV{Path: "test/test1.csv"}
@@ -228,21 +255,26 @@ func DBTest(t *testing.T, db *testDB) {
 	stream, err = csv1.ReadStream()
 	assert.NoError(t, err)
 
+
 	csvTable := db.schema + ".test1"
 	ddl, err = conn.GenerateDDL(csvTable, Dataset{Columns: stream.Columns, Rows: stream.Buffer})
 	assert.NoError(t, err)
+	ok := assert.NotEmpty(t, ddl)
 
-	_, err = conn.Db().Exec(ddl)
-	assert.NoError(t, err)
+	if ok {
+		_, err = conn.Db().Exec(ddl)
+		assert.NoError(t, err)
 
-	// import to database
-	_, err = conn.InsertStream(csvTable, stream)
-	assert.NoError(t, err)
+		// import to database
+		_, err = conn.InsertStream(csvTable, stream)
+		assert.NoError(t, err)
 
-	// select back to assert equality
-	count, err := conn.GetCount(csvTable)
-	assert.NoError(t, err)
-	assert.Equal(t, uint64(1000), count)
+		// select back to assert equality
+		count, err := conn.GetCount(csvTable)
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(1000), count)
+	}
+
 
 	// Test Schemata
 	sData, err := conn.GetSchemata(db.schema)
@@ -252,7 +284,7 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.Contains(t, sData.Tables, "place_vw")
 	assert.Contains(t, conn.Schemata().Tables, db.schema+".person")
 	assert.Len(t, sData.Tables["person"].Columns, 3)
-	assert.Contains(t, []string{"text", "varchar(255)"}, sData.Tables["person"].ColumnsMap["email"].Type)
+	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2"}, sData.Tables["person"].ColumnsMap["email"].Type)
 	assert.Equal(t, true, sData.Tables["place_vw"].IsView)
 	assert.Equal(t, int64(3), conn.Schemata().Tables[db.schema+".person"].ColumnsMap["email"].Position)
 
@@ -271,8 +303,8 @@ func DBTest(t *testing.T, db *testDB) {
 	data, err = conn.RunAnalysis("table_join_match", values)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Contains(t, []interface{}{0.0, int64(0)}, data.Records()[0]["t1_null_cnt"])
-	assert.Equal(t, 100.0, data.Records()[1]["match_rate"])
+	assert.Contains(t, []interface{}{0.0, int64(0), "0"}, data.Records()[0]["t1_null_cnt"])
+	assert.Equal(t, 100.0, cast.ToFloat64(data.Records()[1]["match_rate"]))
 
 	// RunAnalysisTable field_stat
 	data, err = conn.RunAnalysisTable("table_count", db.schema+".person", db.schema+".place")
@@ -289,7 +321,7 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.Equal(t, int64(0), data.Records()[1]["f_dup_cnt"])
 
 	// Drop all tables
-	err = conn.DropTable("person", "place", "transactions", "test1")
+	err = conn.DropTable("person", "place", "transaction", "test1")
 	assert.NoError(t, err)
 
 	conn.Close()

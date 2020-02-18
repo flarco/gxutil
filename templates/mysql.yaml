@@ -312,8 +312,8 @@ function:
   fill_cnt_field: count({field}) as cnt_{field}
   fill_rate_field: round(100.0 * count({field}) / count(1), 2) as prct_{field}
 
-variables:
-  tmp_folder: /tmp
+variable:
+  bind_string: "?"
 
 # native to general
 native_type_map:

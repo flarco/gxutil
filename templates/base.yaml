@@ -1,5 +1,6 @@
 core:
   drop_table: drop table {table}
+  drop_view: drop view {view}
   create_table: create table {table} ({col_types})
   create_index: create index {index} on {table} ({cols})
   insert: insert into {table} ({names}) values ({values})
@@ -312,8 +313,9 @@ function:
   fill_cnt_field: count({field}) as cnt_{field}
   fill_rate_field: round(100.0 * count({field}) / count(1), 2) as prct_{field}
 
-variables:
+variable:
   tmp_folder: /tmp
+  bind_string: ${i}
 
 # native to general
 native_type_map:
