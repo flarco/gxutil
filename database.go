@@ -273,6 +273,9 @@ func (conn *BaseConn) LoadYAML() error {
 	_, filename, _, _ := runtime.Caller(1)
 	pkgerRead := func(name string) (TemplateBytes []byte, err error) {
 		TemplateFile, err := pkger.Open(path.Join(path.Dir(filename), "templates", name))
+		if err != nil {
+			return nil, Error(err, "pkger.Open()"+path.Join(path.Dir(filename), "templates", name))
+		}
 		TemplateBytes, err = ioutil.ReadAll(TemplateFile)
 		return TemplateBytes, err
 	}
