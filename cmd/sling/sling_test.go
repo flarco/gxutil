@@ -3,11 +3,11 @@ package main
 import (
 	"bufio"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 	"testing"
 
+	log "github.com/sirupsen/logrus"
 	g "github.com/flarco/gxutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -52,7 +52,7 @@ var DBs = []*testDB{
 	// 	// https://github.com/godror/godror
 	// 	name:  "Oracle",
 	// 	URL:   os.Getenv("ORACLE_URL"),
-	// 	table: "public.test1",
+	// 	table: "system.test1",
 	// },
 
 	// &testDB{
@@ -85,6 +85,16 @@ var DBs = []*testDB{
 }
 
 func init() {
+	// Log as JSON instead of the default ASCII formatter.
+	log.SetFormatter(&log.JSONFormatter{})
+
+	// Output to stdout instead of the default stderr
+	// Can be any io.Writer, see below for File example
+	log.SetOutput(os.Stderr)
+
+	// Only log the warning severity or above.
+	log.SetLevel(log.WarnLevel)
+
 	for _, db := range DBs {
 		if db.URL == "" {
 			log.Fatal("No Env Var URL for " + db.name)
@@ -95,7 +105,6 @@ func init() {
 }
 
 func TestInToDb(t *testing.T) {
-	// csvFile := "tests/test1.1.csv.gz"
 	csvFile := "tests/test1.csv"
 	testFile1, err := os.Open(csvFile)
 	if err != nil {
@@ -119,7 +128,11 @@ func TestInToDb(t *testing.T) {
 			tgtTable: tgtDB.table,
 			drop:     true,
 		}
-		runInToDB(cfg)
+		err = runFileToDB(cfg)
+		if err != nil {
+			assert.NoError(t, err)
+			return
+		}
 	}
 }
 
@@ -140,7 +153,11 @@ func TestDbToDb(t *testing.T) {
 				tgtTable: tgtDB.table + "_copy",
 				drop:     true,
 			}
-			runDbToDb(cfg)
+			err = runDbToDb(cfg)
+			if err != nil {
+				assert.NoError(t, err)
+				return
+			}
 		}
 	}
 }
@@ -164,7 +181,11 @@ func TestDbToOut(t *testing.T) {
 			file:     testFile2,
 			drop:     true,
 		}
-		runDbToOut(cfg)
+		err = runDbToFile(cfg)
+		if err != nil {
+			assert.NoError(t, err)
+			return
+		}
 
 		testFile2, err = os.Open(filePath2)
 		assert.NoError(t, err)
