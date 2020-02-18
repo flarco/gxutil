@@ -22,6 +22,7 @@ require (
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/mattn/go-sqlite3 v1.12.0
 	github.com/palantir/stacktrace v0.0.0-20161112013806-78658fd2d177 // indirect
+	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/cast v1.3.0
 	github.com/stretchr/testify v1.4.0
 	github.com/xitongsys/parquet-go v1.4.0

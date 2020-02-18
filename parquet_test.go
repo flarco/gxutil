@@ -10,8 +10,8 @@ import (
 func TestParquet(t *testing.T) {
 	return
 
-	csvPath := "templates/test1.1.csv"
-	pqPath := "templates/test1.1.parquet"
+	csvPath := "test/test1.1.csv"
+	pqPath := "test/test1.1.parquet"
 
 	csv1 := CSV{Path: csvPath}
 	err := csv1.InferSchema()

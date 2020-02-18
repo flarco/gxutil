@@ -19,6 +19,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/markbates/pkger"
 	_ "github.com/mattn/go-sqlite3"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cast"
 	"gopkg.in/yaml.v2"
 )
@@ -28,6 +29,7 @@ type Connection interface {
 	Init() error
 	Connect() error
 	Close() error
+	GetType() string
 	GetGormConn() (*gorm.DB, error)
 	LoadYAML() error
 	StreamRows(sql string) (Datastream, error)
@@ -164,6 +166,11 @@ func (conn *BaseConn) Db() *sqlx.DB {
 	return conn.db
 }
 
+// GetType returns the type db object
+func (conn *BaseConn) GetType() string {
+	return conn.Type
+}
+
 // Schemata returns the Schemata object
 func (conn *BaseConn) Schemata() *Schemata {
 	return &conn.schemata
@@ -260,7 +267,7 @@ func (conn *BaseConn) LoadYAML() error {
 		Function:       map[string]string{},
 		GeneralTypeMap: map[string]string{},
 		NativeTypeMap:  map[string]string{},
-		Variable:      map[string]string{},
+		Variable:       map[string]string{},
 	}
 
 	_, filename, _, _ := runtime.Caller(1)
@@ -615,10 +622,12 @@ func (conn *BaseConn) DropTable(tableNames ...string) (err error) {
 			errIgnoreWord := conn.template.Variable["error_ignore_drop"]
 			if !(errIgnoreWord != "" && strings.Contains(cast.ToString(err), errIgnoreWord)) {
 				return Error(err, "Error for "+sql)
-			 }else {
-				Log(F("table %s does not exist", tableName))
+			} else {
+				log.Debug(F("table %s does not exist", tableName))
 			}
-		} 
+		} else {
+			log.Debug(F("table %s dropped", tableName))
+		}
 	}
 	return nil
 }
@@ -887,6 +896,13 @@ func (conn *BaseConn) GenerateDDL(tableFName string, data Dataset) (string, erro
 		"table", tableFName,
 		"col_types", strings.Join(columnsDDL, ",\n"),
 	)
+
+	log.WithFields(log.Fields{
+		"table":          tableFName,
+		"ddl":            ddl,
+		"buffer.Columns": data.Columns,
+		"buffer.Rows":    len(data.Rows),
+	}).Debug("generated DDL")
 
 	return ddl, nil
 }

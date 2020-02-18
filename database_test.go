@@ -52,7 +52,7 @@ type testDB struct {
 
 var DBs = []*testDB{
 	&testDB{
-		name:       "Postgres",
+		name:       "postgres",
 		URL:        os.Getenv("POSTGRES_URL"),
 		viewDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
 		schema:     "public",
@@ -60,7 +60,7 @@ var DBs = []*testDB{
 		placeVwDDL: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
 	},
 	&testDB{
-		name: "SQLite",
+		name: "sqlilte3",
 		URL:  "file:./test.db",
 		viewDDL: `create view place_vw as select * from place where telcode = 65`,
 		schema:     "main",
@@ -76,7 +76,7 @@ var DBs = []*testDB{
 	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
 	// },
 	// &testDB{
-	// 	name: "MS SQL Server",
+	// 	name: "sqlserver",
 	// 	URL:  os.Getenv("MSSQL_URL"),
 	// 	viewDDL: `create view place_vw as select * from place where telcode = 65`,
 	// 	schema:     "main",
@@ -84,7 +84,7 @@ var DBs = []*testDB{
 	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
 	// },
 	// &testDB{
-	// 	name: "Oracle",
+	// 	name: "oracle",
 	// 	URL:  os.Getenv("ORACLE_URL"),
 	// 	viewDDL: `create view place_vw as select * from place where telcode = 65`,
 	// 	schema:     "system",
@@ -109,7 +109,7 @@ func init() {
 func TestDBs(t *testing.T) {
 	for _, db := range DBs {
 		DBTest(t, db)
-		if db.name == "SQLite" {
+		if db.name == "sqlilte3" {
 			os.Remove(strings.ReplaceAll(db.URL, "file:", ""))
 		}
 	}
@@ -223,9 +223,7 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.Equal(t, db.placeVwDDL, ddl)
 
 	// load Csv from test file
-	csv1 := CSV{
-		Path: "templates/test1.csv",
-	}
+	csv1 := CSV{Path: "test/test1.csv"}
 
 	stream, err = csv1.ReadStream()
 	assert.NoError(t, err)

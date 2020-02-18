@@ -14,7 +14,7 @@ var (
 
 func TestS3(t *testing.T) {
 
-	csvPath := "templates/test1.1.csv"
+	csvPath := "test/test1.1.csv"
 	s3Path := "test/test1.1.csv"
 	// s3PathPq := "test/test1.1.parquet"
 
@@ -71,7 +71,7 @@ func TestS3(t *testing.T) {
 func TestCSV(t *testing.T) {
 	err := os.Remove("test2.csv")
 
-	csv1 := CSV{Path: "templates/test1.csv"}
+	csv1 := CSV{Path: "test/test1.csv"}
 
 	// Test streaming read & write
 	ds, err := csv1.ReadStream()
