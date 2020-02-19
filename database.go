@@ -213,7 +213,7 @@ func (conn *BaseConn) Connect() error {
 
 	db, err := sqlx.Open(getDriverName(conn.Type), conn.URL)
 	if err != nil {
-		return Error(err, "Could not connect to DB")
+		return Error(err, "Could not connect to DB: " + getDriverName(conn.Type))
 	}
 
 	conn.db = db

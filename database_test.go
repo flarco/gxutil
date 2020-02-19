@@ -82,36 +82,44 @@ var DBs = []*testDB{
 		placeVwSelect: "CREATE VIEW place_vw as select * from place where telcode = 65",
 	},
 
-	// &testDB{
-	// 	name: "MySQL",
-	// 	URL:  os.Getenv("MYSQL_URL"),
-	// 	viewDDL: `create view place_vw as select * from place where telcode = 65`,
-	// 	schema:     "main",
-	// 	placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
-	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
-	// },
+	&testDB{
+		name: "MySQL",
+		URL:  os.Getenv("MYSQL_URL"),
+		schema:     "mysql",
+		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+		placeDDL:   `CREATE TABLE mysql.place (    country varchar(255) NULL,    city varchar(255) NULL,    telcode DECIMAL NULL)`,
+		placeIndex:    `CREATE INDEX idx_country_city
+		ON place(country, city)`,
+		placeVwDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
+		placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
+	},
 
 	// &testDB{
 	// 	name: "sqlserver",
 	// 	URL:  os.Getenv("MSSQL_URL"),
-	// 	viewDDL: `create view place_vw as select * from place where telcode = 65`,
-	// 	schema:     "main",
-	// 	placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
-	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
+	// 	schema:     "public",
+	// 	transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+	// 	personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+	// 	placeDDL:   "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
+	// 	placeIndex:    `CREATE INDEX idx_country_city
+	// 	ON place(country, city)`,
+	// 	placeVwDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
+	// 	placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
 	// },
 
-	&testDB{
-		name:        "oracle",
-		URL:         os.Getenv("ORACLE_URL"),
-		schema:      "system",
-		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
-		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
-		placeDDL:    "\n  CREATE TABLE \"SYSTEM\".\"PLACE\" \n   (\t\"COUNTRY\" VARCHAR2(255), \n\t\"CITY\" VARCHAR2(255), \n\t\"TELCODE\" NUMBER(*,0)\n   ) PCTFREE 10 PCTUSED 40 INITRANS 1 MAXTRANS 255 NOCOMPRESS LOGGING\n  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645\n  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)\n  TABLESPACE \"SYSTEM\" ",
-		placeIndex: `CREATE INDEX idx_country_city 
-		ON place(country, city)`,
-		placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
-		placeVwSelect: "select \"COUNTRY\",\"CITY\",\"TELCODE\" from place where telcode = 65",
-	},
+	// &testDB{
+	// 	name:        "oracle",
+	// 	URL:         os.Getenv("ORACLE_URL"),
+	// 	schema:      "system",
+	// 	transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+	// 	personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+	// 	placeDDL:    "\n  CREATE TABLE \"SYSTEM\".\"PLACE\" \n   (\t\"COUNTRY\" VARCHAR2(255), \n\t\"CITY\" VARCHAR2(255), \n\t\"TELCODE\" NUMBER(*,0)\n   ) PCTFREE 10 PCTUSED 40 INITRANS 1 MAXTRANS 255 NOCOMPRESS LOGGING\n  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645\n  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)\n  TABLESPACE \"SYSTEM\" ",
+	// 	placeIndex: `CREATE INDEX idx_country_city 
+	// 	ON place(country, city)`,
+	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
+	// 	placeVwSelect: "select \"COUNTRY\",\"CITY\",\"TELCODE\" from place where telcode = 65",
+	// },
 }
 
 func init() {
@@ -224,7 +232,7 @@ func DBTest(t *testing.T, db *testDB) {
 	data, err = conn.GetColumns(db.schema + ".person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2", "character varying"}, data.Records()[0]["data_type"])
+	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2", "character varying", "varchar"}, data.Records()[0]["data_type"])
 
 	// GetPrimarkKeys
 	data, err = conn.GetPrimarkKeys(db.schema + ".person")
@@ -242,7 +250,7 @@ func DBTest(t *testing.T, db *testDB) {
 	data, err = conn.GetColumnsFull(db.schema + ".place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Contains(t, []string{"bigint", "NUMBER"}, data.Records()[2]["data_type"])
+	assert.Contains(t, []string{"bigint", "NUMBER", "decimal"}, data.Records()[2]["data_type"])
 
 	// GetDDL of table
 	ddl, err := conn.GetDDL(db.schema + ".place")
@@ -289,7 +297,7 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.Contains(t, sData.Tables, "place_vw")
 	assert.Contains(t, conn.Schemata().Tables, db.schema+".person")
 	assert.Len(t, sData.Tables["person"].Columns, 3)
-	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2", "character varying"}, sData.Tables["person"].ColumnsMap["email"].Type)
+	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2", "character varying", "varchar"}, sData.Tables["person"].ColumnsMap["email"].Type)
 	assert.Equal(t, true, sData.Tables["place_vw"].IsView)
 	assert.Equal(t, int64(3), conn.Schemata().Tables[db.schema+".person"].ColumnsMap["email"].Position)
 

@@ -146,6 +146,8 @@ github.com/xitongsys/parquet-go v1.4.0/go.mod h1:on8bl2K/PEouGNEJqxht0t3K4IyN/AB
 github.com/xitongsys/parquet-go v1.5.0 h1:ymtvDhyslOlaZPivKezIq3EHNivuevgZAUjHHO+6/9Q=
 github.com/xitongsys/parquet-go-source v0.0.0-20191104003508-ecfa341356a6 h1:KPDKkdchSII+K5KS7iMpE062MVh2OucaM31599ER4U0=
 github.com/xitongsys/parquet-go-source v0.0.0-20191104003508-ecfa341356a6/go.mod h1:xxCx7Wpym/3QCo6JhujJX51dzSXrwmb0oH6FQb39SEA=
+github.com/xo/dburl v0.0.0-20200124232849-e9ec94f52bc3 h1:NC3CI7do3KHtiuYhk1CdS9V2qS3jNa7Fs2Afcnnt+IE=
+github.com/xo/dburl v0.0.0-20200124232849-e9ec94f52bc3/go.mod h1:A47W3pdWONaZmXuLZgfKLAVgUY0qvfTRM5vVDKS40S4=
 go.opencensus.io v0.20.1/go.mod h1:6WKK9ahsWS3RSO+PY9ZHZUfv2irvY6gN279GOPZjmmk=
 golang.org/x/crypto v0.0.0-20180904163835-0709b304e793/go.mod h1:6SG95UA2DQfeDnfUPMdvaQW0Q7yPrPDi9nlGo2tz2b4=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=

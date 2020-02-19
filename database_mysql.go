@@ -1,5 +1,11 @@
 package gxutil
 
+import (
+	"strings"
+	"github.com/xo/dburl"
+	"github.com/spf13/cast"
+)
+
 // MySQLConn is a Postgres connection
 type MySQLConn struct {
 	BaseConn
@@ -8,6 +14,27 @@ type MySQLConn struct {
 
 // Init initiates the object
 func (conn *MySQLConn) Init() error {
+
+	u, err := dburl.Parse(conn.URL)
+	if err != nil {
+		return err
+	}
+
+	// Add tcp explicitly...
+	// https://github.com/go-sql-driver/mysql/issues/427#issuecomment-474034276
+	conn.URL = strings.ReplaceAll(
+		conn.URL,
+		"@"+u.Host,
+		F("@tcp(%s)", u.Host),
+	)
+
+	// remove scheme
+	conn.URL = strings.ReplaceAll(
+		conn.URL,
+		"mysql://",
+		"",
+	)
+
 	conn.BaseConn = BaseConn{
 		URL:  conn.URL,
 		Type: "mysql",
@@ -16,9 +43,22 @@ func (conn *MySQLConn) Init() error {
 	return conn.BaseConn.LoadYAML()
 }
 
-// InsertStream inserts a stream into a table
-// Bulk Insert: https://github.com/go-sql-driver/mysql/#load-data-local-infile-support
-func (conn *MySQLConn) InsertStream(tableFName string, ds Datastream) (count uint64, err error) {
+// GetDDL returns DDL for given table.
+func (conn *MySQLConn) GetDDL(tableFName string) (string, error) {
+	schema, table := splitTableFullName(tableFName)
+	sql := R(
+		conn.template.Metadata["ddl"],
+		"schema", schema,
+		"table", table,
+	)
+	data, err := conn.Query(sql)
+	if err != nil {
+		return "", err
+	}
 
-	return count, nil
+	if len(data.Rows) == 0 {
+		return "", nil
+	}
+
+	return cast.ToString(data.Rows[0][1]), nil
 }
