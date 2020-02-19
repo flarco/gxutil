@@ -191,6 +191,8 @@ func runDbToFile(c Config) (err error) {
 		return g.Error(err, "Could not connect to: "+srcConn.GetType())
 	}
 
+	srcConn.SetProp("s3Bucket", c.s3Bucket)
+
 	csv := g.CSV{File: c.file}
 
 	sql := `select * from ` + c.srcTable

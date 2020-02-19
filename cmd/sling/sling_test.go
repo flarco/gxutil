@@ -7,16 +7,16 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/sirupsen/logrus"
 	g "github.com/flarco/gxutil"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
 type testDB struct {
-	name   string
-	URL    string
-	table  string
-	conn   g.Connection
+	name  string
+	URL   string
+	table string
+	conn  g.Connection
 }
 
 var (
@@ -26,31 +26,31 @@ var (
 var DBs = []*testDB{
 	&testDB{
 		// https://github.com/lib/pq
-		name:   "Postgres",
-		URL:    os.Getenv("POSTGRES_URL"),
-		table:  "public.test1",
+		name:  "Postgres",
+		URL:   os.Getenv("POSTGRES_URL"),
+		table: "public.test1",
 	},
 
-	&testDB{
-		// https://github.com/mattn/go-sqlite3
-		name:   "SQLite",
-		URL:    "file:./test.db",
-		table:  "main.test1",
-	},
+	// &testDB{
+	// 	// https://github.com/mattn/go-sqlite3
+	// 	name:  "SQLite",
+	// 	URL:   "file:./test.db",
+	// 	table: "main.test1",
+	// },
 
-	&testDB{
-		// https://github.com/godror/godror
-		name:  "Oracle",
-		URL:   os.Getenv("ORACLE_URL"),
-		table: "system.test1",
-	},
+	// &testDB{
+	// 	// https://github.com/godror/godror
+	// 	name:  "Oracle",
+	// 	URL:   os.Getenv("ORACLE_URL"),
+	// 	table: "system.test1",
+	// },
 
-	&testDB{
-		// https://github.com/denisenkom/go-mssqldb
-		name:  "MySQL",
-		URL:   os.Getenv("MYSQL_URL"),
-		table: "mysql.test1",
-	},
+	// &testDB{
+	// 	// https://github.com/denisenkom/go-mssqldb
+	// 	name:  "MySQL",
+	// 	URL:   os.Getenv("MYSQL_URL"),
+	// 	table: "mysql.test1",
+	// },
 
 	// &testDB{
 	// 	// https://github.com/denisenkom/go-mssqldb
@@ -66,12 +66,12 @@ var DBs = []*testDB{
 	// 	table: "public.test1",
 	// },
 
-	// &testDB{
-	// 	// https://github.com/lib/pq
-	// 	name:   "Redshift",
-	// 	URL:    os.Getenv("REDSHIFT_URL"),
-	// 	table:  "public.test1",
-	// },
+	&testDB{
+		// https://github.com/lib/pq
+		name:  "Redshift",
+		URL:   os.Getenv("REDSHIFT_URL"),
+		table: "public.test1",
+	},
 }
 
 func init() {
@@ -117,6 +117,7 @@ func TestInToDb(t *testing.T) {
 			tgtDB:    tgtDB.URL,
 			tgtTable: tgtDB.table,
 			drop:     true,
+			s3Bucket: os.Getenv("S3_BUCKET"),
 		}
 		err = runFileToDB(cfg)
 		if err != nil {
@@ -142,6 +143,7 @@ func TestDbToDb(t *testing.T) {
 				tgtDB:    tgtDB.URL,
 				tgtTable: tgtDB.table + "_copy",
 				drop:     true,
+				s3Bucket: os.Getenv("S3_BUCKET"),
 			}
 			err = runDbToDb(cfg)
 			if err != nil {
@@ -170,6 +172,7 @@ func TestDbToOut(t *testing.T) {
 			srcTable: srcTable,
 			file:     testFile2,
 			drop:     true,
+			s3Bucket: os.Getenv("S3_BUCKET"),
 		}
 		err = runDbToFile(cfg)
 		if err != nil {
@@ -188,11 +191,20 @@ func TestDbToOut(t *testing.T) {
 			if equal {
 				err = os.Remove(filePath2)
 				assert.NoError(t, err)
-				srcDB.conn = g.GetConn(srcDB.URL)
-				srcDB.conn.Connect()
-				srcDB.conn.DropTable(srcTable)
-				srcDB.conn.DropTable(srcTableCopy)
-				srcDB.conn.Close()
+
+				conn := g.GetConn(srcDB.URL)
+
+				err = conn.Connect()
+				assert.NoError(t, err)
+
+				err = conn.DropTable(srcTable)
+				assert.NoError(t, err)
+
+				err = conn.DropTable(srcTableCopy)
+				assert.NoError(t, err)
+
+				err = conn.Close()
+				assert.NoError(t, err)
 			}
 		} else {
 			testFile1Lines := len(strings.Split(string(testFile1Bytes), "\n"))

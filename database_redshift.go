@@ -16,9 +16,8 @@ import (
 // RedshiftConn is a Redshift connection
 type RedshiftConn struct {
 	BaseConn
-	URL  string
+	URL string
 }
-
 
 // Init initiates the object
 func (conn *RedshiftConn) Init() error {
@@ -77,16 +76,20 @@ func (conn *RedshiftConn) unload(sql string) (s3Path string, err error) {
 		"aws_secret_access_key", AwsAccessKey,
 	)
 	_, err = txn.Exec(unloadSQL)
-	if err == nil {
-		Log(F("Unloaded to s3://%s/%s", s3.Bucket, s3Path))
+	if err != nil {
+		cleanSQL := strings.ReplaceAll(unloadSQL, AwsID, "*****")
+		cleanSQL = strings.ReplaceAll(cleanSQL, AwsAccessKey, "*****")
+		return s3Path, Error(err, "SQL Error:\n"+cleanSQL)
 	}
+
+	Log(F("Unloaded to s3://%s/%s", s3.Bucket, s3Path))
 
 	return s3Path, err
 }
 
 // BulkStream reads in bulk
 func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
-
+	var mux sync.Mutex
 	maxWorkers := 5
 	workers := 0
 	done := 0
@@ -96,13 +99,17 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 	}
 
 	s3Path, err := conn.unload(sql)
-	LogErrorExit(err)
+	if err != nil {
+		return ds, Error(err, "Could not unload.")
+	}
 
 	s3PartPaths, err := s3.List(s3Path + "/")
-	LogErrorExit(err)
+	if err != nil {
+		return ds, Error(err, "Could not s3.List for "+s3Path+"/")
+	}
 
 	ds = Datastream{
-		Rows: make(chan []interface{}),
+		Rows: make(chan []interface{}, 100000), // 100000 row limit in memory
 	}
 
 	decompressAndStream := func(s3PartPath string, dsMain *Datastream) {
@@ -115,7 +122,7 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 			time.Sleep(100 * time.Millisecond)
 		}
 
-		Log("Reading " + s3PartPath)
+		// Log(F("Reading from s3://%s/%s", s3.Bucket, s3PartPath))
 
 		gzReader, err := s3.ReadStream(s3PartPath)
 		LogErrorExit(err)
@@ -126,10 +133,15 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 
 		csvPart := CSV{Reader: gzReader}
 		dsPart, err := csvPart.ReadStream()
+		if err != nil {
+			LogError(Error(err, "Error for csvPart.ReadStream()"))
+		}
 
-		if dsMain.Columns == nil {
+		mux.Lock()
+		if dsMain.Columns == nil && len(dsPart.Buffer) > 0 {
 			dsMain.Columns = dsPart.Columns
 		}
+		mux.Unlock()
 
 		// foward to channel, rows will came in disorder
 		for row := range dsPart.Rows {
@@ -139,7 +151,7 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 		done++
 
 		if done == len(s3PartPaths) {
-			close(ds.Rows)
+			close(dsMain.Rows)
 		}
 	}
 
@@ -152,7 +164,7 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 
 	// loop until columns are parsed
 	for {
-		if ds.Columns != nil {
+		if ds.Columns != nil && ds.Columns[0].Type != "" {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -179,32 +191,39 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 	}
 
 	if s3.Bucket == "" {
-		LogErrorExit(errors.New("Need to set 's3Bucket' to copy to redshift"))
+		return count, errors.New("Need to set 's3Bucket' to copy to redshift")
 	}
 
 	if AwsID == "" || AwsAccessKey == "" {
-		LogErrorExit(errors.New("Need to set env vars 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' to copy to redshift"))
+		return count, errors.New("Need to set env vars 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' to copy to redshift")
 	}
 
 	compressAndUpload := func(bytesData []byte, s3PartPath string, wg *sync.WaitGroup) {
 		defer wg.Done()
 		gzReader := Compress(bytes.NewReader(bytesData))
 		err := s3.WriteStream(s3PartPath, gzReader)
-		LogErrorExit(err)
+		if err != nil {
+			LogError(Error(err, F("could not upload to s3://%s/%s", s3.Bucket, s3PartPath)))
+			return
+		}
 		Log(F("uploaded to s3://%s/%s", s3.Bucket, s3PartPath))
 	}
 
 	err = s3.Delete(s3Path)
+	if err != nil {
+		return count, Error(err, "Could not s3.Delete: "+s3Path)
+	}
 
 	fileCount := 0
 	for {
 		fileCount++
 		s3PartPath := F("%s/%04d.gz", s3Path, fileCount)
-		LogErrorExit(err)
 
 		reader := ds.NewCsvReader(fileRowLimit)
 		bytesData, err := ioutil.ReadAll(reader)
-		LogErrorExit(err)
+		if err != nil {
+			return count, Error(err, "Could not ioutil.ReadAll")
+		}
 
 		// need to kick off threads to compress and upload
 		// separately to not slow query ingress.
@@ -228,10 +247,16 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 		"aws_secret_access_key", AwsAccessKey,
 	)
 	_, err = txn.Exec(sql)
-	LogErrorExit(err)
+	if err != nil {
+		cleanSQL := strings.ReplaceAll(sql, AwsID, "*****")
+		cleanSQL = strings.ReplaceAll(cleanSQL, AwsAccessKey, "*****")
+		return count, Error(err, "SQL Error:\n"+cleanSQL)
+	}
 
 	err = txn.Commit()
-	LogErrorExit(err)
+	if err != nil {
+		return count, Error(err, "Could not commit")
+	}
 
 	return ds.count, nil
 }

@@ -56,39 +56,39 @@ type testDB struct {
 
 var DBs = map[string]*testDB{
 	"postgres": &testDB{
-		name:       "postgres",
-		URL:        os.Getenv("POSTGRES_URL"),
-		schema:     "public",
+		name:        "postgres",
+		URL:         os.Getenv("POSTGRES_URL"),
+		schema:      "public",
 		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
 		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
-		placeDDL:   "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
-		placeIndex:    `CREATE INDEX idx_country_city
+		placeDDL:    "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
+		placeIndex: `CREATE INDEX idx_country_city
 		ON place(country, city)`,
 		placeVwDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
 		placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
 	},
 
 	"sqlite3": &testDB{
-		name: "sqlite3",
-		URL:  "file:./test.db",
-		schema:     "main",
+		name:   "sqlite3",
+		URL:    "file:./test.db",
+		schema: "main",
 
 		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
 		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
-		placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
-		placeIndex:    `CREATE INDEX idx_country_city
+		placeDDL:    "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
+		placeIndex: `CREATE INDEX idx_country_city
 		ON place(country, city)`,
 		placeVwDDL:    "CREATE VIEW place_vw as select * from place where telcode = 65",
 		placeVwSelect: "CREATE VIEW place_vw as select * from place where telcode = 65",
 	},
 
 	"mysql": &testDB{
-		name: "mysql",
-		URL:  os.Getenv("MYSQL_URL"),
-		schema:     "mysql",
-		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
-		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
-		placeDDL:   "CREATE TABLE `place` (\n  `country` varchar(255) DEFAULT NULL,\n  `city` varchar(255) DEFAULT NULL,\n  `telcode` decimal(10,0) DEFAULT NULL,\n  KEY `idx_country_city` (`country`,`city`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+		name:          "mysql",
+		URL:           os.Getenv("MYSQL_URL"),
+		schema:        "mysql",
+		transactDDL:   `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+		personDDL:     `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+		placeDDL:      "CREATE TABLE `place` (\n  `country` varchar(255) DEFAULT NULL,\n  `city` varchar(255) DEFAULT NULL,\n  `telcode` decimal(10,0) DEFAULT NULL,\n  KEY `idx_country_city` (`country`,`city`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
 		placeIndex:    `select 1`, //`CREATE INDEX idx_country_city ON place(country, city)`,
 		placeVwDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
 		placeVwSelect: "CREATE ALGORITHM=UNDEFINED DEFINER=`admin`@`%` SQL SECURITY DEFINER VIEW `place_vw` AS select `place`.`country` AS `country`,`place`.`city` AS `city`,`place`.`telcode` AS `telcode` from `place` where (`place`.`telcode` = 65)",
@@ -116,8 +116,21 @@ var DBs = map[string]*testDB{
 		placeDDL:    "\n  CREATE TABLE \"SYSTEM\".\"PLACE\" \n   (\t\"COUNTRY\" VARCHAR2(255), \n\t\"CITY\" VARCHAR2(255), \n\t\"TELCODE\" NUMBER(*,0)\n   ) PCTFREE 10 PCTUSED 40 INITRANS 1 MAXTRANS 255 NOCOMPRESS LOGGING\n  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645\n  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)\n  TABLESPACE \"SYSTEM\" ",
 		placeIndex: `CREATE INDEX idx_country_city 
 		ON place(country, city)`,
-		placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
+		placeVwDDL:    "CREATE VIEW place_vw as select * from place where telcode = 65",
 		placeVwSelect: "select \"COUNTRY\",\"CITY\",\"TELCODE\" from place where telcode = 65",
+	},
+
+	"redshift": &testDB{
+		name:        "redshift",
+		URL:         os.Getenv("REDSHIFT_URL"),
+		schema:      "public",
+		transactDDL: `CREATE TABLE public.transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+		personDDL:   `CREATE TABLE public.person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+		placeDDL:    "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
+		placeIndex: `CREATE INDEX idx_country_city
+		ON place(country, city)`,
+		placeVwDDL:    `create or replace view public.place_vw as select * from place where telcode = 65`,
+		placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
 	},
 }
 
@@ -138,11 +151,15 @@ func TestOracle(t *testing.T) {
 	DBTest(t, DBs["oracle"])
 }
 
+func TestRedshift(t *testing.T) {
+	DBTest(t, DBs["redshift"])
+}
+
 func DBTest(t *testing.T, db *testDB) {
 	println("Testing " + db.name)
 	if db.URL == "" {
 		log.Fatal("No Env Var URL for " + db.name)
-	} 
+	}
 	conn := GetConn(db.URL)
 	err := conn.Connect()
 	assert.NoError(t, err)
@@ -161,8 +178,10 @@ func DBTest(t *testing.T, db *testDB) {
 	conn.Db().MustExec(db.transactDDL)
 	conn.Db().MustExec(db.personDDL)
 	conn.Db().MustExec(db.placeDDL)
-	conn.Db().MustExec(db.placeIndex)
 	conn.Db().MustExec(db.placeVwDDL)
+	if db.name != "redshift" {
+		conn.Db().MustExec(db.placeIndex)
+	}
 
 	personInsertStatement := conn.GenerateInsertStatement("person", []string{"first_name", "last_name", "email"})
 	placeInsertStatement := conn.GenerateInsertStatement("place", []string{"country", "city", "telcode"})
@@ -233,16 +252,20 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2", "character varying", "varchar"}, data.Records()[0]["data_type"])
 
 	// GetPrimaryKeys
-	data, err = conn.GetPrimaryKeys(db.schema + ".person")
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 1)
-	assert.Equal(t, "first_name", strings.ToLower(cast.ToString(data.Records()[0]["column_name"])))
+	if db.name != "redshift" {
+		data, err = conn.GetPrimaryKeys(db.schema + ".person")
+		assert.NoError(t, err)
+		assert.Len(t, data.Rows, 1)
+		assert.Equal(t, "first_name", strings.ToLower(cast.ToString(data.Records()[0]["column_name"])))
+	}
 
 	// GetIndexes
-	data, err = conn.GetIndexes(db.schema + ".place")
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, "city", strings.ToLower(cast.ToString(data.Records()[1]["column_name"])))
+	if db.name != "redshift" {
+		data, err = conn.GetIndexes(db.schema + ".place")
+		assert.NoError(t, err)
+		assert.Len(t, data.Rows, 2)
+		assert.Equal(t, "city", strings.ToLower(cast.ToString(data.Records()[1]["column_name"])))
+	}
 
 	// GetColumnsFull
 	data, err = conn.GetColumnsFull(db.schema + ".place")
@@ -251,14 +274,18 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.Contains(t, []string{"bigint", "NUMBER", "decimal"}, data.Records()[2]["data_type"])
 
 	// GetDDL of table
-	ddl, err := conn.GetDDL(db.schema + ".place")
-	assert.NoError(t, err)
-	assert.Equal(t, db.placeDDL, ddl)
+	if db.name != "redshift" {
+		ddl, err := conn.GetDDL(db.schema + ".place")
+		assert.NoError(t, err)
+		assert.Equal(t, db.placeDDL, ddl)
+	}
 
 	// GetDDL of view
-	ddl, err = conn.GetDDL(db.schema + ".place_vw")
-	assert.NoError(t, err)
-	assert.Equal(t, db.placeVwSelect, ddl)
+	if db.name != "redshift" {
+		ddl, err := conn.GetDDL(db.schema + ".place_vw")
+		assert.NoError(t, err)
+		assert.Equal(t, db.placeVwSelect, ddl)
+	}
 
 	// load Csv from test file
 	csv1 := CSV{Path: "test/test1.csv"}
@@ -266,9 +293,8 @@ func DBTest(t *testing.T, db *testDB) {
 	stream, err = csv1.ReadStream()
 	assert.NoError(t, err)
 
-
 	csvTable := db.schema + ".test1"
-	ddl, err = conn.GenerateDDL(csvTable, Dataset{Columns: stream.Columns, Rows: stream.Buffer})
+	ddl, err := conn.GenerateDDL(csvTable, Dataset{Columns: stream.Columns, Rows: stream.Buffer})
 	assert.NoError(t, err)
 	ok := assert.NotEmpty(t, ddl)
 
@@ -277,6 +303,7 @@ func DBTest(t *testing.T, db *testDB) {
 		assert.NoError(t, err)
 
 		// import to database
+		conn.SetProp("s3Bucket", os.Getenv("S3_BUCKET"))
 		_, err = conn.InsertStream(csvTable, stream)
 		assert.NoError(t, err)
 
@@ -285,7 +312,6 @@ func DBTest(t *testing.T, db *testDB) {
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(1000), count)
 	}
-
 
 	// Test Schemata
 	sData, err := conn.GetSchemata(db.schema)

@@ -1,10 +1,10 @@
 package gxutil
 
 import (
+	"bufio"
 	"encoding/csv"
 	"fmt"
 	"io"
-	"bufio"
 	"os"
 	"time"
 
@@ -143,7 +143,7 @@ func (c *CSV) ReadStream() (ds Datastream, err error) {
 	if err != nil {
 		return ds, err
 	}
-	
+
 	r = csv.NewReader(reader)
 
 	row0, err := r.Read()
@@ -168,8 +168,7 @@ func (c *CSV) ReadStream() (ds Datastream, err error) {
 			if err == io.EOF {
 				break
 			} else if err != nil {
-				Check(err, "Error reading file")
-				break
+				return ds, Error(err, "Error reading file")
 			}
 
 			row := make([]interface{}, len(row0))
