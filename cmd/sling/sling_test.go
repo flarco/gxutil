@@ -48,12 +48,12 @@ var DBs = []*testDB{
 	// 	schema: "public",
 	// },
 
-	// &testDB{
-	// 	// https://github.com/godror/godror
-	// 	name:  "Oracle",
-	// 	URL:   os.Getenv("ORACLE_URL"),
-	// 	table: "system.test1",
-	// },
+	&testDB{
+		// https://github.com/godror/godror
+		name:  "Oracle",
+		URL:   os.Getenv("ORACLE_URL"),
+		table: "system.test1",
+	},
 
 	// &testDB{
 	// 	// https://github.com/denisenkom/go-mssqldb

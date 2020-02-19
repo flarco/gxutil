@@ -183,6 +183,7 @@ func writeTmpToTarget(c Config, tgtConn g.Connection) (err error) {
 }
 
 func runDbToFile(c Config) (err error) {
+	start = time.Now()
 
 	srcConn := g.GetConn(c.srcDB)
 	err = srcConn.Connect()
@@ -231,6 +232,7 @@ func runDbToFile(c Config) (err error) {
 // load into temp table
 // insert / upsert / replace into target table
 func runFileToDB(c Config) (err error) {
+	start = time.Now()
 	tgtConn := g.GetConn(c.tgtDB)
 	err = tgtConn.Connect()
 	if err != nil {
@@ -284,6 +286,7 @@ func runFileToDB(c Config) (err error) {
 }
 
 func runDbToDb(c Config) (err error) {
+	start = time.Now()
 
 	// var srcConn, tgtConn PostgresConn
 	srcConn := g.GetConn(c.srcDB)

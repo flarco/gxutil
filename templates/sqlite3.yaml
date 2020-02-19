@@ -1,5 +1,6 @@
 core:
   drop_table: drop table if exists {table}
+  drop_view: drop view if exists {view}
   create_table: create table if not exists {table} ({col_types})
   replace: replace into {table} ({names}) values({values})
   insert_option: ""
@@ -104,6 +105,7 @@ native_type_map:
   integer: "integer"
   bigint: "integer"
   number: "decimal"
+  decimal: "decimal"
   float64: "decimal"
   float: "decimal"
   double: "decimal"

@@ -232,7 +232,7 @@ func (data *Dataset) setColumns(colTypes []*sql.ColumnType, NativeTypeMap map[st
 		}
 
 		data.Columns[i] = Column{
-			Name:     colType.Name(),
+			Name:     strings.ToLower(colType.Name()),
 			Position: int64(i + 1),
 			Type:     Type,
 			colType:  colType,

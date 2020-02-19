@@ -55,27 +55,32 @@ type testDB struct {
 }
 
 var DBs = []*testDB{
-	// &testDB{
-	// 	name:       "postgres",
-	// 	URL:        os.Getenv("POSTGRES_URL"),
-	// 	schema:     "public",
-	// 	transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
-	// 	personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
-	// 	placeDDL:   "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
-	// 	placeIndex:    `CREATE INDEX idx_country_city
-	// 	ON place(country, city)`,
-	// 	placeVwDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
-	// 	placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
-	// },
+	&testDB{
+		name:       "postgres",
+		URL:        os.Getenv("POSTGRES_URL"),
+		schema:     "public",
+		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+		placeDDL:   "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
+		placeIndex:    `CREATE INDEX idx_country_city
+		ON place(country, city)`,
+		placeVwDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
+		placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
+	},
 
-	// &testDB{
-	// 	name: "sqlilte3",
-	// 	URL:  "file:./test.db",
-	// 	viewDDL: `create view place_vw as select * from place where telcode = 65`,
-	// 	schema:     "main",
-	// 	placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
-	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
-	// },
+	&testDB{
+		name: "sqlilte3",
+		URL:  "file:./test.db",
+		schema:     "main",
+
+		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+		placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
+		placeIndex:    `CREATE INDEX idx_country_city
+		ON place(country, city)`,
+		placeVwDDL:    "CREATE VIEW place_vw as select * from place where telcode = 65",
+		placeVwSelect: "CREATE VIEW place_vw as select * from place where telcode = 65",
+	},
 
 	// &testDB{
 	// 	name: "MySQL",
@@ -219,7 +224,7 @@ func DBTest(t *testing.T, db *testDB) {
 	data, err = conn.GetColumns(db.schema + ".person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2"}, data.Records()[0]["data_type"])
+	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2", "character varying"}, data.Records()[0]["data_type"])
 
 	// GetPrimarkKeys
 	data, err = conn.GetPrimarkKeys(db.schema + ".person")
@@ -284,7 +289,7 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.Contains(t, sData.Tables, "place_vw")
 	assert.Contains(t, conn.Schemata().Tables, db.schema+".person")
 	assert.Len(t, sData.Tables["person"].Columns, 3)
-	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2"}, sData.Tables["person"].ColumnsMap["email"].Type)
+	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2", "character varying"}, sData.Tables["person"].ColumnsMap["email"].Type)
 	assert.Equal(t, true, sData.Tables["place_vw"].IsView)
 	assert.Equal(t, int64(3), conn.Schemata().Tables[db.schema+".person"].ColumnsMap["email"].Position)
 
@@ -321,7 +326,7 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.Equal(t, int64(0), data.Records()[1]["f_dup_cnt"])
 
 	// Drop all tables
-	err = conn.DropTable("person", "place", "transaction", "test1")
+	err = conn.DropTable("person", "place", "transact", "test1")
 	assert.NoError(t, err)
 
 	conn.Close()
