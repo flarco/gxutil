@@ -252,8 +252,10 @@ func runFileToDB(c Config) (err error) {
 	if c.drop {
 		d := g.Dataset{Columns: stream.Columns, Rows: stream.Buffer}
 		c.tgtTableDDL, err = tgtConn.GenerateDDL(c.tgtTable, d)
-		
-		
+		if err != nil {
+			return g.Error(err, "Could not create table "+c.tgtTable)
+		}
+
 		err = tgtConn.DropTable(c.tgtTable)
 		if err != nil {
 			return g.Error(err, "Could not drop table "+c.tgtTable)
@@ -334,6 +336,9 @@ func runDbToDb(c Config) (err error) {
 	if c.drop {
 		d := g.Dataset{Columns: stream.Columns, Rows: stream.Buffer}
 		c.tgtTableDDL, err = tgtConn.GenerateDDL(c.tgtTable, d)
+		if err != nil {
+			return g.Error(err, "Could not create table "+c.tgtTable)
+		}
 
 		err = tgtConn.DropTable(c.tgtTable)
 		if err != nil {

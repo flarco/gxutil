@@ -202,6 +202,8 @@ func TestDbToOut(t *testing.T) {
 			if equal {
 				err = os.Remove(filePath2)
 				os.Remove(strings.ReplaceAll(srcDB.URL, "file:", ""))
+			} else {
+				println("Not equal for " + srcDB.name)
 			}
 		}
 	}

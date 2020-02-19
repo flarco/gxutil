@@ -117,3 +117,30 @@ func TestCSV(t *testing.T) {
 	// err = os.Remove("test2.csv")
 
 }
+
+func bParseString(val string, b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		ParseString(val)
+	}
+}
+
+// go test -run BenchmarkParseString -bench=.
+// assume worst case 1000ns * 100 columns * 100000 rows = 0.01sec
+func BenchmarkParseString1String(b *testing.B) {
+	bParseString("hello my name is", b)
+}
+func BenchmarkParseString2Date1(b *testing.B) {
+	bParseString("01-JAN-02 15:04:05", b)
+}
+func BenchmarkParseString3Date2(b *testing.B) {
+	bParseString("2006-01-02 15:04:05", b)
+}
+func BenchmarkParseString4Date3(b *testing.B) {
+	bParseString("2006-01-02", b)
+}
+func BenchmarkParseString5Int(b *testing.B) {
+	bParseString("239189210510", b)
+}
+func BenchmarkParseString6Float(b *testing.B) {
+	bParseString("239189210510.25234", b)
+}

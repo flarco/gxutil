@@ -86,23 +86,25 @@ func ParseString(s string) interface{} {
 		return i
 	}
 
+	// float
+	f, err := strconv.ParseFloat(s, 64)
+	if err == nil {
+		return f
+	}
+
 	// date layouts to try out
 	layouts := []string{
 		"2006-01-02 15:04:05",
 		"2006-01-02",
 		"2006-01-02T15:04:05.000Z",
+		"01-JAN-02",
+		"01-JAN-02 15:04:05",
 	}
 	for _, layout := range layouts {
 		t, err := time.Parse(layout, s)
 		if err == nil {
 			return t
 		}
-	}
-
-	// float
-	f, err := strconv.ParseFloat(s, 64)
-	if err == nil {
-		return f
 	}
 
 	// boolean

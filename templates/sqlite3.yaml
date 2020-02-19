@@ -132,4 +132,5 @@ general_type_map:
   decimal: "real"
   date: "text"
   datetime: "text"
+  timestamp: "text"
   text: "blob"

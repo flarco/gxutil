@@ -368,19 +368,9 @@ func processVal(val interface{}) interface{} {
 	case bool:
 		nVal = cast.ToBool(val)
 	case []uint8:
-		// arr := val.([]uint8)
-		// buf := make([]byte, len(arr))
-		// for j, n := range arr {
-		// 	buf[j] = byte(n)
-		// }
-		f, err := strconv.ParseFloat(cast.ToString(val), 64)
-		if err != nil {
-			nVal = cast.ToString(val)
-		} else {
-			nVal = f
-		}
+		nVal = ParseString(cast.ToString(val))
 	default:
-		nVal = cast.ToString(val)
+		nVal = ParseString(cast.ToString(val))
 		_ = fmt.Sprint(v)
 		// fmt.Printf("%T\n", val)
 	}
