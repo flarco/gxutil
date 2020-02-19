@@ -3,7 +3,6 @@ package gxutil
 import (
 	"strings"
 	"github.com/xo/dburl"
-	"github.com/spf13/cast"
 )
 
 // MySQLConn is a Postgres connection
@@ -41,24 +40,4 @@ func (conn *MySQLConn) Init() error {
 	}
 
 	return conn.BaseConn.LoadYAML()
-}
-
-// GetDDL returns DDL for given table.
-func (conn *MySQLConn) GetDDL(tableFName string) (string, error) {
-	schema, table := splitTableFullName(tableFName)
-	sql := R(
-		conn.template.Metadata["ddl"],
-		"schema", schema,
-		"table", table,
-	)
-	data, err := conn.Query(sql)
-	if err != nil {
-		return "", err
-	}
-
-	if len(data.Rows) == 0 {
-		return "", nil
-	}
-
-	return cast.ToString(data.Rows[0][1]), nil
 }

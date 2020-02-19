@@ -93,6 +93,11 @@ func PrintV(v interface{}) {
 	println(F("%#v", v))
 }
 
+// PrintT prints the type of object
+func PrintT(v interface{}) {
+	println(F("%T", v))
+}
+
 // Propagate is a modified version of stacktrace Propagate
 func Propagate(err error, msg string) error {
 	return stacktrace.Propagate(err, msg, 4)

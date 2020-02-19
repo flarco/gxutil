@@ -141,7 +141,7 @@ metadata:
       and tables.table_name = cols.table_name
     order by cols.table_catalog, cols.table_schema, cols.table_name, cols.ordinal_position
   
-  ddl: "
+  ddl_table: "
     with tabledefinition as (
       SELECT 
         n.nspname, c.relname, a.attname AS column_name,
@@ -174,17 +174,12 @@ metadata:
         from tabledefinition
         group by nspname, relname
     )
-    , view_ddl as (
-      SELECT pg_get_viewdef(
-    to_regclass('{schema}.{table}'))::text as ddl
-    )
     select
-      case when view_ddl.ddl is null or view_ddl.ddl = 'Not a view'
-      then table_ddl.ddl
-      else view_ddl.ddl
-      end as ddl
-    from view_ddl, table_ddl
+      table_ddl.ddl as ddl
+    from table_ddl
     "
+  ddl_view: |
+    SELECT pg_get_viewdef(to_regclass('{schema}.{table}'))::text as ddl
 
 analysis:
   field_chars: |

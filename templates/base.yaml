@@ -316,6 +316,7 @@ function:
 variable:
   tmp_folder: /tmp
   bind_string: ${i}
+  ddl_col: 0
 
 # native to general
 native_type_map:

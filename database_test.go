@@ -54,8 +54,8 @@ type testDB struct {
 	placeVwSelect string
 }
 
-var DBs = []*testDB{
-	&testDB{
+var DBs = map[string]*testDB{
+	"postgres": &testDB{
 		name:       "postgres",
 		URL:        os.Getenv("POSTGRES_URL"),
 		schema:     "public",
@@ -68,8 +68,8 @@ var DBs = []*testDB{
 		placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
 	},
 
-	&testDB{
-		name: "sqlilte3",
+	"sqlite3": &testDB{
+		name: "sqlite3",
 		URL:  "file:./test.db",
 		schema:     "main",
 
@@ -82,20 +82,19 @@ var DBs = []*testDB{
 		placeVwSelect: "CREATE VIEW place_vw as select * from place where telcode = 65",
 	},
 
-	&testDB{
-		name: "MySQL",
+	"mysql": &testDB{
+		name: "mysql",
 		URL:  os.Getenv("MYSQL_URL"),
 		schema:     "mysql",
 		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
 		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
-		placeDDL:   `CREATE TABLE mysql.place (    country varchar(255) NULL,    city varchar(255) NULL,    telcode DECIMAL NULL)`,
-		placeIndex:    `CREATE INDEX idx_country_city
-		ON place(country, city)`,
+		placeDDL:   "CREATE TABLE `place` (\n  `country` varchar(255) DEFAULT NULL,\n  `city` varchar(255) DEFAULT NULL,\n  `telcode` decimal(10,0) DEFAULT NULL,\n  KEY `idx_country_city` (`country`,`city`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+		placeIndex:    `select 1`, //`CREATE INDEX idx_country_city ON place(country, city)`,
 		placeVwDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
-		placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
+		placeVwSelect: "CREATE ALGORITHM=UNDEFINED DEFINER=`admin`@`%` SQL SECURITY DEFINER VIEW `place_vw` AS select `place`.`country` AS `country`,`place`.`city` AS `city`,`place`.`telcode` AS `telcode` from `place` where (`place`.`telcode` = 65)",
 	},
 
-	// &testDB{
+	// "sqlserver": &testDB{
 	// 	name: "sqlserver",
 	// 	URL:  os.Getenv("MSSQL_URL"),
 	// 	schema:     "public",
@@ -108,48 +107,47 @@ var DBs = []*testDB{
 	// 	placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
 	// },
 
-	// &testDB{
-	// 	name:        "oracle",
-	// 	URL:         os.Getenv("ORACLE_URL"),
-	// 	schema:      "system",
-	// 	transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
-	// 	personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
-	// 	placeDDL:    "\n  CREATE TABLE \"SYSTEM\".\"PLACE\" \n   (\t\"COUNTRY\" VARCHAR2(255), \n\t\"CITY\" VARCHAR2(255), \n\t\"TELCODE\" NUMBER(*,0)\n   ) PCTFREE 10 PCTUSED 40 INITRANS 1 MAXTRANS 255 NOCOMPRESS LOGGING\n  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645\n  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)\n  TABLESPACE \"SYSTEM\" ",
-	// 	placeIndex: `CREATE INDEX idx_country_city 
-	// 	ON place(country, city)`,
-	// 	placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
-	// 	placeVwSelect: "select \"COUNTRY\",\"CITY\",\"TELCODE\" from place where telcode = 65",
-	// },
+	"oracle": &testDB{
+		name:        "oracle",
+		URL:         os.Getenv("ORACLE_URL"),
+		schema:      "system",
+		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+		placeDDL:    "\n  CREATE TABLE \"SYSTEM\".\"PLACE\" \n   (\t\"COUNTRY\" VARCHAR2(255), \n\t\"CITY\" VARCHAR2(255), \n\t\"TELCODE\" NUMBER(*,0)\n   ) PCTFREE 10 PCTUSED 40 INITRANS 1 MAXTRANS 255 NOCOMPRESS LOGGING\n  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645\n  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)\n  TABLESPACE \"SYSTEM\" ",
+		placeIndex: `CREATE INDEX idx_country_city 
+		ON place(country, city)`,
+		placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
+		placeVwSelect: "select \"COUNTRY\",\"CITY\",\"TELCODE\" from place where telcode = 65",
+	},
 }
 
-func init() {
-	for _, db := range DBs {
-		if db.URL == "" {
-			log.Fatal("No Env Var URL for " + db.name)
-		} else if db.name == "SQLite" {
-			os.Remove(strings.ReplaceAll(db.URL, "file:", ""))
-		}
-		db.conn = GetConn(db.URL)
-		err := db.conn.Connect()
-		LogErrorExit(err)
-	}
+func TestPostgres(t *testing.T) {
+	DBTest(t, DBs["postgres"])
 }
 
-func TestDBs(t *testing.T) {
-	for _, db := range DBs {
-		DBTest(t, db)
-		if db.name == "sqlilte3" {
-			os.Remove(strings.ReplaceAll(db.URL, "file:", ""))
-		}
-	}
+func TestSQLite(t *testing.T) {
+	os.Remove(strings.ReplaceAll(DBs["sqlite3"].URL, "file:", ""))
+	DBTest(t, DBs["sqlite3"])
+}
+
+func TestMySQL(t *testing.T) {
+	DBTest(t, DBs["mysql"])
+}
+
+func TestOracle(t *testing.T) {
+	DBTest(t, DBs["oracle"])
 }
 
 func DBTest(t *testing.T, db *testDB) {
 	println("Testing " + db.name)
+	if db.URL == "" {
+		log.Fatal("No Env Var URL for " + db.name)
+	} 
+	conn := GetConn(db.URL)
+	err := conn.Connect()
+	assert.NoError(t, err)
 
-	conn := db.conn
-
-	err := conn.DropTable(db.schema+".person", db.schema+".place", db.schema+".transact")
+	err = conn.DropTable(db.schema+".person", db.schema+".place", db.schema+".transact")
 	assert.NoError(t, err)
 
 	err = conn.DropView(db.schema + ".place_vw")
@@ -234,8 +232,8 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.Len(t, data.Rows, 3)
 	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2", "character varying", "varchar"}, data.Records()[0]["data_type"])
 
-	// GetPrimarkKeys
-	data, err = conn.GetPrimarkKeys(db.schema + ".person")
+	// GetPrimaryKeys
+	data, err = conn.GetPrimaryKeys(db.schema + ".person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 1)
 	assert.Equal(t, "first_name", strings.ToLower(cast.ToString(data.Records()[0]["column_name"])))
@@ -323,15 +321,15 @@ func DBTest(t *testing.T, db *testDB) {
 	data, err = conn.RunAnalysisTable("table_count", db.schema+".person", db.schema+".place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, int64(2), data.Records()[0]["cnt"])
-	assert.Equal(t, int64(3), data.Records()[1]["cnt"])
+	assert.EqualValues(t, int64(2), data.Records()[0]["cnt"])
+	assert.EqualValues(t, int64(3), data.Records()[1]["cnt"])
 
 	// RunAnalysisField field_stat
 	data, err = conn.RunAnalysisField("field_stat", db.schema+".person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, int64(2), data.Records()[0]["tot_cnt"])
-	assert.Equal(t, int64(0), data.Records()[1]["f_dup_cnt"])
+	assert.EqualValues(t, int64(2), data.Records()[0]["tot_cnt"])
+	assert.EqualValues(t, int64(0), data.Records()[1]["f_dup_cnt"])
 
 	// Drop all tables
 	err = conn.DropTable("person", "place", "transact", "test1")

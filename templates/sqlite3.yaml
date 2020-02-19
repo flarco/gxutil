@@ -73,9 +73,13 @@ metadata:
       and sm2.type = 'view'
     order by sm.name, pti.cid
   
-  ddl: |
+  ddl_table: |
     select sql from sqlite_master
-    where name = '{table}' and type in ('table', 'view')
+    where name = '{table}' and type in ('table')
+  
+  ddl_view: |
+    select sql from sqlite_master
+    where name = '{table}' and type in ('view')
 
 analysis:
   chars: |

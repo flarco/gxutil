@@ -55,7 +55,7 @@ type Connection interface {
 	GetTables(string) (Dataset, error)
 	GetViews(string) (Dataset, error)
 	GetColumns(string) (Dataset, error)
-	GetPrimarkKeys(string) (Dataset, error)
+	GetPrimaryKeys(string) (Dataset, error)
 	GetIndexes(string) (Dataset, error)
 	GetColumnsFull(string) (Dataset, error)
 	GetCount(string) (uint64, error)
@@ -511,10 +511,11 @@ func (conn *BaseConn) Query(sql string) (Dataset, error) {
 
 	ds, err := conn.StreamRows(sql)
 	if err != nil {
-		return Dataset{}, err
+		return Dataset{SQL:sql}, err
 	}
 
 	data := ds.Collect()
+	data.SQL = sql
 	data.Duration = conn.Data.Duration // Collect does not time duration
 
 	return data, nil
@@ -590,8 +591,8 @@ func (conn *BaseConn) GetColumnsFull(tableFName string) (Dataset, error) {
 	return conn.Query(sql)
 }
 
-// GetPrimarkKeys returns primark keys for given table.
-func (conn *BaseConn) GetPrimarkKeys(tableFName string) (Dataset, error) {
+// GetPrimaryKeys returns primark keys for given table.
+func (conn *BaseConn) GetPrimaryKeys(tableFName string) (Dataset, error) {
 	sql := getMetadataTableFName(conn, "primary_keys", tableFName)
 	return conn.Query(sql)
 }
@@ -604,17 +605,36 @@ func (conn *BaseConn) GetIndexes(tableFName string) (Dataset, error) {
 
 // GetDDL returns DDL for given table.
 func (conn *BaseConn) GetDDL(tableFName string) (string, error) {
-	sql := getMetadataTableFName(conn, "ddl", tableFName)
-	data, err := conn.Query(sql)
+	schema, table := splitTableFullName(tableFName)
+	ddlCol := cast.ToInt(conn.template.Variable["ddl_col"])
+	sqlTable := R(
+		conn.template.Metadata["ddl_table"],
+		"schema", schema,
+		"table", table,
+	)
+	sqlView := R(
+		conn.template.Metadata["ddl_view"],
+		"schema", schema,
+		"table", table,
+	)
+
+	data, err := conn.Query(sqlView)
 	if err != nil {
 		return "", err
+	}
+
+	if len(data.Rows) == 0 || data.Rows[0][ddlCol] == nil {
+		data, err = conn.Query(sqlTable)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	if len(data.Rows) == 0 {
 		return "", nil
 	}
 
-	return cast.ToString(data.Rows[0][0]), nil
+	return cast.ToString(data.Rows[0][ddlCol]), nil
 }
 
 func getMetadataTableFName(conn *BaseConn, template string, tableFName string) string {
@@ -693,7 +713,7 @@ func (conn *BaseConn) GetSchemata(schemaName string) (Schema, error) {
 		tableName := strings.ToLower(cast.ToString(rec["table_name"]))
 
 		switch v := rec["is_view"].(type) {
-		case int64:
+		case int64, float64:
 			if cast.ToInt64(rec["is_view"]) == 0 {
 				rec["is_view"] = false
 			} else {

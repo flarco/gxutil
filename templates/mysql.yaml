@@ -1,5 +1,6 @@
 core:
-  drop_table: drop table {table}
+  drop_table: drop table if exists {table} cascade
+  drop_view: drop table if exists {view} cascade
   create_table: create table {table} ({col_types})
   create_index: create index {index} on {table} ({cols})
   insert: insert into {table} ({names}) values ({values})
@@ -39,10 +40,11 @@ metadata:
            kcu.ordinal_position as position,
            kcu.column_name as column_name
     from information_schema.table_constraints tco
-    join information_schema.key_column_usage kcu 
-         on kcu.constraint_name = tco.constraint_name
-         and kcu.constraint_schema = tco.constraint_schema
-         and kcu.constraint_name = tco.constraint_name
+    join information_schema.key_column_usage kcu  
+      on kcu.constraint_catalog = tco.constraint_catalog
+      and kcu.constraint_schema = tco.constraint_schema
+      and kcu.table_schema = tco.table_schema
+      and kcu.table_name = tco.table_name
     where kcu.table_schema = '{schema}'
       and kcu.table_name = '{table}'
     order by kcu.table_schema,
@@ -113,7 +115,8 @@ metadata:
       and tables.table_name = cols.table_name
     order by cols.table_catalog, cols.table_schema, cols.table_name, cols.ordinal_position
   
-  ddl: SHOW CREATE TABLE {schema}.{table}
+  ddl_table: SHOW CREATE TABLE {schema}.{table}
+  ddl_view: SHOW CREATE TABLE {schema}.{table}
 
 analysis:
   # table level
@@ -127,7 +130,7 @@ analysis:
 
   table_join_match: |
     -- table_join_match "{t1}" vs "{t2}"
-    with T1 as (
+    with t1 as (
       select
         {t1_fields1},
         count(1) cnt
@@ -135,7 +138,7 @@ analysis:
       where {t1_filter}
       group by {t1_fields1}
     )
-    , T2 as (
+    , t2 as (
       select
         {t2_fields1},
         count(1) cnt
@@ -423,6 +426,7 @@ function:
 
 variable:
   bind_string: "?"
+  ddl_col: 1
 
 # native to general
 native_type_map:
@@ -446,7 +450,7 @@ native_type_map:
 
 # general to native
 general_type_map:
-  string: "varchar"
+  string: "varchar()"
   integer: "integer"
   number: "decimal"
   decimal: "decimal"

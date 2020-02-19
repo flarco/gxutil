@@ -17,7 +17,6 @@ type testDB struct {
 	URL    string
 	table  string
 	conn   g.Connection
-	schema string
 }
 
 var (
@@ -30,29 +29,27 @@ var DBs = []*testDB{
 		name:   "Postgres",
 		URL:    os.Getenv("POSTGRES_URL"),
 		table:  "public.test1",
-		schema: "public",
 	},
 
 	&testDB{
+		// https://github.com/mattn/go-sqlite3
 		name:   "SQLite",
 		URL:    "file:./test.db",
 		table:  "main.test1",
-		schema: "main",
 	},
-
-	// &testDB{
-	// 	// https://github.com/lib/pq
-	// 	name:   "Redshift",
-	// 	URL:    os.Getenv("REDSHIFT_URL"),
-	// 	table:  "public.test1",
-	// 	schema: "public",
-	// },
 
 	&testDB{
 		// https://github.com/godror/godror
 		name:  "Oracle",
 		URL:   os.Getenv("ORACLE_URL"),
 		table: "system.test1",
+	},
+
+	&testDB{
+		// https://github.com/denisenkom/go-mssqldb
+		name:  "MySQL",
+		URL:   os.Getenv("MYSQL_URL"),
+		table: "mysql.test1",
 	},
 
 	// &testDB{
@@ -63,24 +60,17 @@ var DBs = []*testDB{
 	// },
 
 	// &testDB{
-	// 	// https://github.com/denisenkom/go-mssqldb
-	// 	name:  "MySQL",
-	// 	URL:   os.Getenv("MYSQL_URL"),
-	// 	table: "public.test1",
-	// },
-
-	// &testDB{
-	// 	// https://github.com/mattn/go-sqlite3
-	// 	name:  "SQLite",
-	// 	URL:   os.Getenv("SQLITE_URL"),
-	// 	table: "public.test1",
-	// },
-
-	// &testDB{
 	// 	// https://github.com/snowflakedb/gosnowflake
 	// 	name:  "Snowflake",
 	// 	URL:   os.Getenv("SNOWFLAKE_URL"),
 	// 	table: "public.test1",
+	// },
+
+	// &testDB{
+	// 	// https://github.com/lib/pq
+	// 	name:   "Redshift",
+	// 	URL:    os.Getenv("REDSHIFT_URL"),
+	// 	table:  "public.test1",
 	// },
 }
 
