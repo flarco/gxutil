@@ -690,7 +690,7 @@ func (conn *BaseConn) GetSchemata(schemaName string) (Schema, error) {
 	schema.Name = schemaName
 
 	for _, rec := range schemaData.Records() {
-		tableName := cast.ToString(rec["table_name"])
+		tableName := strings.ToLower(cast.ToString(rec["table_name"]))
 
 		switch v := rec["is_view"].(type) {
 		case int64:
@@ -724,7 +724,7 @@ func (conn *BaseConn) GetSchemata(schemaName string) (Schema, error) {
 
 		column := Column{
 			Position: cast.ToInt64(rec["position"]),
-			Name:     cast.ToString(rec["column_name"]),
+			Name:     strings.ToLower(cast.ToString(rec["column_name"])),
 			Type:     cast.ToString(rec["data_type"]),
 		}
 
