@@ -14,13 +14,11 @@ RUN cd /tmp && \
   alien -i oracle-instantclient19.3-*.rpm
 
 
-RUN printf "\n\n# Oracle Client environment\n \
-export LD_LIBRARY_PATH=/usr/lib/oracle/19.3/client64/lib/${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} \
-export ORACLE_HOME=/usr/lib/oracle/19.3/client64\n" | tee /etc/profile.d/oracle-env.sh > /dev/null
-
 RUN echo ' \
-. /etc/profile.d/oracle-env.sh \
-export PATH="$PATH:/usr/lib/oracle/19.3/client64/bin" \
+# Oracle Client environment
+export ORACLE_HOME=/usr/lib/oracle/19.3/client64 \
+export LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH \
+export PATH="$PATH:$ORACLE_HOME/bin" \
 ' >> /root/.bashrc
 
 ## Install mssql-tools
