@@ -111,7 +111,7 @@ func (s *S3) GetRegion() (region string) {
 		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
 			fmt.Fprintf(os.Stderr, "unable to find bucket %s's region not found\n", s.Bucket)
 		}
-		LogError(err)
+		LogError(Error(err, "Bucket not found for "+s.Bucket))
 	}
 
 	s.Region = region

@@ -87,7 +87,7 @@ func (conn *RedshiftConn) unload(sql string) (s3Path string, err error) {
 	return s3Path, err
 }
 
-// BulkStream reads in bulk
+// BulkExportStream reads in bulk
 func (conn *RedshiftConn) BulkExportStream(sql string) (ds Datastream, err error) {
 	var mux sync.Mutex
 	maxWorkers := 5
@@ -125,16 +125,12 @@ func (conn *RedshiftConn) BulkExportStream(sql string) (ds Datastream, err error
 		// Log(F("Reading from s3://%s/%s", s3.Bucket, s3PartPath))
 
 		gzReader, err := s3.ReadStream(s3PartPath)
-		LogErrorExit(err)
-
-		// reader, err := Decompress(gzReader)
-		// LogErrorExit(err)
-		// reader := Tee(reader0, 50)
+		LogError(Error(err, F("Could not s3.ReadStream for s3://%s/%s", s3.Bucket, s3PartPath)))
 
 		csvPart := CSV{Reader: gzReader}
 		dsPart, err := csvPart.ReadStream()
 		if err != nil {
-			LogError(Error(err, "Error for csvPart.ReadStream()"))
+			LogError(Error(err, F("Could not csvPart.ReadStream() s3://%s/%s", s3.Bucket, s3PartPath)))
 		}
 
 		mux.Lock()
@@ -173,9 +169,9 @@ func (conn *RedshiftConn) BulkExportStream(sql string) (ds Datastream, err error
 	return ds, err
 }
 
-// InsertStream inserts a stream into a table.
+// BulkImportStream inserts a stream into a table.
 // For redshift we need to create CSVs in S3 and then use the COPY command.
-func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count uint64, err error) {
+func (conn *RedshiftConn) BulkImportStream(tableFName string, ds Datastream) (count uint64, err error) {
 	var wg sync.WaitGroup
 
 	s3 := S3{

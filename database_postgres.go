@@ -8,12 +8,13 @@ import (
 	"strings"
 
 	pq "github.com/lib/pq"
+	"github.com/spf13/cast"
 )
 
 // PostgresConn is a Postgres connection
 type PostgresConn struct {
 	BaseConn
-	URL  string
+	URL string
 }
 
 // Init initiates the object
@@ -22,6 +23,10 @@ func (conn *PostgresConn) Init() error {
 		URL:  conn.URL,
 		Type: "postgres",
 	}
+
+	// Turn off Bulk export for now
+	// the CopyToStdout function frequently produces error `read |0: file already closed`
+	conn.BaseConn.SetProp("allow_bulk_export", "false")
 
 	return conn.BaseConn.LoadYAML()
 }
@@ -53,6 +58,10 @@ func (conn *PostgresConn) BulkExportStream(sql string) (ds Datastream, err error
 	_, err = exec.LookPath("psql")
 	if err != nil {
 		Log("psql not found in path. Using cursor...")
+		return conn.StreamRows(sql)
+	}
+
+	if !cast.ToBool(conn.BaseConn.GetProp("allow_bulk_export")) {
 		return conn.StreamRows(sql)
 	}
 

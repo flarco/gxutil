@@ -130,7 +130,7 @@ func (c *CSV) ReadStream() (ds Datastream, err error) {
 	if c.File == nil && c.Reader == nil {
 		file, err := os.Open(c.Path)
 		if err != nil {
-			return ds, err
+			return ds, Error(err, "os.Open(c.Path)")
 		}
 		c.File = file
 		c.Reader = bufio.NewReader(c.File)
@@ -141,14 +141,14 @@ func (c *CSV) ReadStream() (ds Datastream, err error) {
 	// decompress if gzip
 	reader, err := Decompress(c.Reader)
 	if err != nil {
-		return ds, err
+		return ds, Error(err, "Decompress(c.Reader)")
 	}
 
 	r = csv.NewReader(reader)
 
 	row0, err := r.Read()
 	if err != nil {
-		return ds, err
+		return ds, Error(err, "r.Read()")
 	} else if err == io.EOF {
 		return ds, nil
 	}

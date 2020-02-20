@@ -299,6 +299,9 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.NoError(t, err)
 
 	csvTable := db.schema + ".test1"
+	err = conn.DropTable(csvTable)
+	assert.NoError(t, err)
+
 	ddl, err := conn.GenerateDDL(csvTable, Dataset{Columns: stream.Columns, Rows: stream.Buffer})
 	assert.NoError(t, err)
 	ok := assert.NotEmpty(t, ddl)
@@ -364,7 +367,7 @@ func DBTest(t *testing.T, db *testDB) {
 
 	// Extract / Load Test
 	if db.name != "sqlite3" {
-		ELTest(t, db.URL, csvTable)
+		ELTest(t, db, csvTable)
 	}
 
 	// Drop all tables
@@ -374,14 +377,14 @@ func DBTest(t *testing.T, db *testDB) {
 	conn.Close()
 }
 
-func ELTest(t *testing.T, url string, srcTable string) {
+func ELTest(t *testing.T, db *testDB, srcTable string) {
 	tgtTable := srcTable + "2"
 	_, sTable := splitTableFullName(srcTable)
 	_, tTable := splitTableFullName(tgtTable)
 
 	// var srcConn, tgtConn PostgresConn
-	srcConn := GetConn(url)
-	tgtConn := GetConn(url)
+	srcConn := GetConn(db.URL)
+	tgtConn := GetConn(db.URL)
 
 	err := srcConn.Connect()
 	assert.NoError(t, err)
@@ -392,6 +395,12 @@ func ELTest(t *testing.T, url string, srcTable string) {
 	ddl, err := srcConn.GetDDL(srcTable)
 	assert.NoError(t, err)
 	newDdl := strings.Replace(ddl, sTable, tTable, 1)
+	if db.name == "oracle"{
+		newDdl = strings.Replace(
+			ddl, strings.ToUpper(sTable),
+			strings.ToUpper(tTable), 1,
+		)
+	}
 
 	err = tgtConn.DropTable(tgtTable)
 	assert.NoError(t, err)
