@@ -19,7 +19,23 @@ core:
     select to_char(dbms_metadata.get_ddl(
     upper('{obj_type}'),upper('{table}'),upper('{schema}'))) as ddl
     from dual
-
+  sqlldr: |
+    OPTIONS (
+      SKIP=1,
+      ROWS=1000,
+      PARALLEL=true,
+      DIRECT=true,
+      SKIP_INDEX_MAINTENANCE=true
+    )
+    LOAD DATA
+    INFILE '/dev/stdin'
+    APPEND
+    INTO TABLE {table}
+    FIELDS TERMINATED BY ","
+    OPTIONALLY ENCLOSED BY '"'
+    (
+      {columns}
+    )
 metadata:
   schemas: |
     select username
