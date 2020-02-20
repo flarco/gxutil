@@ -33,7 +33,8 @@ type Connection interface {
 	GetGormConn() (*gorm.DB, error)
 	LoadYAML() error
 	StreamRows(sql string) (Datastream, error)
-	BulkStream(sql string) (Datastream, error)
+	BulkExportStream(sql string) (Datastream, error)
+	BulkImportStream(tableFName string, ds Datastream) (count uint64, err error)
 	Query(sql string) (Dataset, error)
 	GenerateDDL(tableFName string, data Dataset) (string, error)
 	GenerateInsertStatement(tableName string, fields []string) string
@@ -441,10 +442,16 @@ func (conn *BaseConn) StreamRecords(sql string) (<-chan map[string]interface{}, 
 	return chnl, nil
 }
 
-// BulkStream streams the rows in bulk
-func (conn *BaseConn) BulkStream(sql string) (ds Datastream, err error) {
-	Log("BulkStream not implemented for " + conn.Type)
+// BulkExportStream streams the rows in bulk
+func (conn *BaseConn) BulkExportStream(sql string) (ds Datastream, err error) {
+	Log("BulkExportStream not implemented for " + conn.Type)
 	return conn.StreamRows(sql)
+}
+
+// BulkImportStream import the stream rows in bulk
+func (conn *BaseConn) BulkImportStream(tableFName string, ds Datastream) (count uint64, err error) {
+	Log("BulkImportStream not implemented for " + conn.Type)
+	return conn.InsertStream(tableFName, ds)
 }
 
 // StreamRows the rows of a sql query, returns `result`, `error`

@@ -48,8 +48,8 @@ func (conn *PostgresConn) CopyToStdout(sql string) (stdOutReader io.Reader, err 
 	return stdOutReader, err
 }
 
-// BulkStream uses the bulk dumping (COPY)
-func (conn *PostgresConn) BulkStream(sql string) (ds Datastream, err error) {
+// BulkExportStream uses the bulk dumping (COPY)
+func (conn *PostgresConn) BulkExportStream(sql string) (ds Datastream, err error) {
 	_, err = exec.LookPath("psql")
 	if err != nil {
 		Log("psql not found in path. Using cursor...")
@@ -67,8 +67,8 @@ func (conn *PostgresConn) BulkStream(sql string) (ds Datastream, err error) {
 	return ds, err
 }
 
-// InsertStream inserts a stream into a table
-func (conn *PostgresConn) InsertStream(tableFName string, ds Datastream) (count uint64, err error) {
+// BulkImportStream inserts a stream into a table
+func (conn *PostgresConn) BulkImportStream(tableFName string, ds Datastream) (count uint64, err error) {
 
 	columns := ds.GetFields()
 	schema, table := splitTableFullName(tableFName)

@@ -1,7 +1,7 @@
 package gxutil
 
 import (
-	"log"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -155,10 +155,15 @@ func TestRedshift(t *testing.T) {
 	DBTest(t, DBs["redshift"])
 }
 
+func TestSqlServer(t *testing.T) {
+	DBTest(t, DBs["sqlserver"])
+}
+
 func DBTest(t *testing.T, db *testDB) {
 	println("Testing " + db.name)
 	if db.URL == "" {
-		log.Fatal("No Env Var URL for " + db.name)
+		assert.Error(t, errors.New("No Env Var URL for "+db.name))
+		return
 	}
 	conn := GetConn(db.URL)
 	err := conn.Connect()
@@ -357,6 +362,11 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.EqualValues(t, int64(2), data.Records()[0]["tot_cnt"])
 	assert.EqualValues(t, int64(0), data.Records()[1]["f_dup_cnt"])
 
+	// Extract / Load Test
+	if db.name != "sqlite3" {
+		ELTest(t, db.URL, csvTable)
+	}
+
 	// Drop all tables
 	err = conn.DropTable("person", "place", "transact", "test1")
 	assert.NoError(t, err)
@@ -364,12 +374,14 @@ func DBTest(t *testing.T, db *testDB) {
 	conn.Close()
 }
 
-func PGtoPGTest(t *testing.T, srcTable string) {
+func ELTest(t *testing.T, url string, srcTable string) {
 	tgtTable := srcTable + "2"
+	_, sTable := splitTableFullName(srcTable)
+	_, tTable := splitTableFullName(tgtTable)
 
 	// var srcConn, tgtConn PostgresConn
-	srcConn := GetConn(PostgresURL)
-	tgtConn := GetConn(PostgresURL)
+	srcConn := GetConn(url)
+	tgtConn := GetConn(url)
 
 	err := srcConn.Connect()
 	assert.NoError(t, err)
@@ -379,13 +391,13 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 
 	ddl, err := srcConn.GetDDL(srcTable)
 	assert.NoError(t, err)
-	newDdl := strings.Replace(ddl, srcTable, tgtTable, 1)
+	newDdl := strings.Replace(ddl, sTable, tTable, 1)
 
 	err = tgtConn.DropTable(tgtTable)
 	assert.NoError(t, err)
 
 	_, err = tgtConn.Db().Exec(newDdl)
-	assert.NoError(t, err)
+	assert.NoError(t, Error(err, newDdl))
 
 	stream, err := srcConn.StreamRows(`select * from ` + srcTable)
 	assert.NoError(t, err)
@@ -395,24 +407,26 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 		assert.NoError(t, err)
 
 		data, err := tgtConn.RunAnalysisTable("table_count", srcTable, tgtTable)
-		assert.NoError(t, err)
-		assert.Equal(t, data.Records()[0]["cnt"], data.Records()[1]["cnt"])
+		if assert.NoError(t, err) {
+			assert.Equal(t, data.Records()[0]["cnt"], data.Records()[1]["cnt"])
+		}
 	}
 
-	// use Copy TO
+	// use Bulk
 	_, err = tgtConn.Query("truncate table " + tgtTable)
 	assert.NoError(t, err)
 
-	stream, err = srcConn.BulkStream(`select * from ` + srcTable)
+	stream, err = srcConn.BulkExportStream(`select * from ` + srcTable)
 	assert.NoError(t, err)
 
 	if err == nil {
-		_, err = tgtConn.InsertStream(tgtTable, stream)
+		_, err = tgtConn.BulkImportStream(tgtTable, stream)
 		assert.NoError(t, err)
 
 		data, err := tgtConn.RunAnalysisTable("table_count", srcTable, tgtTable)
-		assert.NoError(t, err)
-		assert.Equal(t, data.Records()[0]["cnt"], data.Records()[1]["cnt"])
+		if assert.NoError(t, err) {
+			assert.Equal(t, data.Records()[0]["cnt"], data.Records()[1]["cnt"])
+		}
 	}
 
 	err = tgtConn.DropTable(tgtTable)

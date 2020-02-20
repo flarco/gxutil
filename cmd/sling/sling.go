@@ -214,7 +214,7 @@ func runDbToFile(c Config) (err error) {
 		)
 	}
 
-	stream, err := srcConn.BulkStream(sql)
+	stream, err := srcConn.BulkExportStream(sql)
 	if err != nil {
 		return g.Error(err, "Could not BulkStream: "+sql)
 	}
@@ -279,7 +279,7 @@ func runFileToDB(c Config) (err error) {
 
 	g.Log("streaming inserts")
 	// stream.SetProgressBar()
-	cnt, err := tgtConn.InsertStream(c.tgtTable, stream)
+	cnt, err := tgtConn.BulkImportStream(c.tgtTable, stream)
 	if err != nil {
 		return g.Error(err, "Could not InsertStream: "+c.tgtTable)
 	}
@@ -328,7 +328,7 @@ func runDbToDb(c Config) (err error) {
 		)
 	}
 
-	stream, err := srcConn.BulkStream(sql)
+	stream, err := srcConn.BulkExportStream(sql)
 	if err != nil {
 		return g.Error(err, "Could not BulkStream: "+sql)
 	}
@@ -363,7 +363,7 @@ func runDbToDb(c Config) (err error) {
 
 	g.Log("streaming inserts")
 	// stream.SetProgressBar()
-	cnt, err := tgtConn.InsertStream(c.tgtTable, stream)
+	cnt, err := tgtConn.BulkImportStream(c.tgtTable, stream)
 	if err != nil {
 		return g.Error(err, "Could not InsertStream: "+c.tgtTable)
 	}

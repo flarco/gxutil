@@ -88,7 +88,7 @@ func (conn *RedshiftConn) unload(sql string) (s3Path string, err error) {
 }
 
 // BulkStream reads in bulk
-func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
+func (conn *RedshiftConn) BulkExportStream(sql string) (ds Datastream, err error) {
 	var mux sync.Mutex
 	maxWorkers := 5
 	workers := 0

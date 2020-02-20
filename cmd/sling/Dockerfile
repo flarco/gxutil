@@ -1,6 +1,6 @@
 FROM golang:1.13
 
-RUN apt update && apt install -y alien libaio1 && \
+RUN apt update && apt install -y alien libaio1 mysql-client-core-5.7 mariadb-client postgresql-client && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists /var/cache/apt
 
@@ -20,6 +20,19 @@ export ORACLE_HOME=/usr/lib/oracle/19.3/client64\n" | tee /etc/profile.d/oracle-
 RUN echo " \
 . /etc/profile.d/oracle-env.sh \
 " >> /root/.bashrc
+
+## Install mssql-tools
+## from https://docs.microsoft.com/en-us/sql/linux/sql-server-linux-setup-tools?view=sql-server-ver15#ubuntu
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
+
+RUN curl https://packages.microsoft.com/config/ubuntu/16.04/prod.list | tee /etc/apt/sources.list.d/msprod.list
+
+RUN apt-get update  && apt-get install -y mssql-tools unixodbc-dev && \
+  apt-get clean && \
+  rm -rf /var/lib/apt/lists /var/cache/apt
+
+RUN echo ' \
+export PATH="$PATH:/opt/mssql-tools/bin"' >> /root/.bashrc
 
 RUN cd /tmp && \
   wget https://github.com/flarco/gxutil/releases/download/sling-latest-Linux/sling-linux.gz && \
