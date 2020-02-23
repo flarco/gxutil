@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -30,18 +31,23 @@ sling --srcDB $POSTGRES_URL --tgtDB $POSTGRES_URL --srcTable housing.my_data2 --
 
 // Config is a config for the sling task
 type Config struct {
-	srcDB    string
-	srcTable string
-	tgtDB    string
-	tgtTable string
-	sqlFile  string
-	s3Bucket string
-	limit    uint64
-	drop     bool
-	truncate bool
-	in       bool
-	out      bool
-	file     *os.File
+	srcDB       string
+	srcTable    string
+	tgtDB       string
+	tgtTable    string
+	sqlFile     string
+	s3Bucket    string
+	limit       uint64
+	drop        bool
+	truncate    bool
+	in          bool
+	out         bool
+	file        *os.File
+	tgtTableDDL string
+	tgtTableTmp string
+}
+
+func init() {
 }
 
 func Init() {
@@ -116,22 +122,76 @@ func Init() {
 
 	if InToDB {
 		cfg.file = os.Stdin
-		runInToDB(cfg)
+		g.LogErrorExit(runFileToDB(cfg))
 	} else if DbToDb {
-		runDbToDb(cfg)
+		g.LogErrorExit(runDbToDb(cfg))
 	} else if DbToOut {
 		cfg.file = os.Stdout
-		runDbToOut(cfg)
+		g.LogErrorExit(runDbToFile(cfg))
 	} else if showExamples {
 		println(examples)
 	}
 }
 
-func runDbToOut(c Config) {
+// writeTmpToTarget write from the temp table to the final table
+// data is already in temp table
+func writeTmpToTarget(c Config, tgtConn g.Connection) (err error) {
+	// drop / replace / insert into target
+	if c.drop {
+		err = tgtConn.DropTable(c.tgtTable)
+		if err != nil {
+			return g.Error(err, "Could not drop table "+c.tgtTable)
+		}
+
+		// rename tmp to tgt
+		sql := g.R(
+			tgtConn.GetTemplateValue("core.rename_table"),
+			"table", c.tgtTableTmp,
+			"new_table", c.tgtTable,
+		)
+		_, err = tgtConn.Db().Exec(sql)
+		if err != nil {
+			return g.Error(err, "Could not execute SQL: "+sql)
+		}
+	} else {
+		// insert
+
+		tgtColsData, err := tgtConn.GetColumns(c.tgtTable)
+		if err != nil {
+			return g.Error(err, "Could not GetColumns for "+c.tgtTable)
+		}
+
+		tgtCols := []string{}
+		for _, row := range tgtColsData.Rows {
+			tgtCols = append(tgtCols, cast.ToString(row[0]))
+		}
+
+		sql := g.R(
+			tgtConn.GetTemplateValue("core.insert_temp"),
+			"table", c.tgtTable,
+			"cols", strings.Join(tgtCols, ", "),
+			"temp_table", c.tgtTableTmp,
+		)
+
+		_, err = tgtConn.Db().Exec(sql)
+		if err != nil {
+			return g.Error(err, "Could not execute SQL: "+sql)
+		}
+
+	}
+	return nil
+}
+
+func runDbToFile(c Config) (err error) {
 	start = time.Now()
+
 	srcConn := g.GetConn(c.srcDB)
-	err := srcConn.Connect()
-	g.LogErrorExit(err)
+	err = srcConn.Connect()
+	if err != nil {
+		return g.Error(err, "Could not connect to: "+srcConn.GetType())
+	}
+
+	srcConn.SetProp("s3Bucket", c.s3Bucket)
 
 	csv := g.CSV{File: c.file}
 
@@ -140,7 +200,7 @@ func runDbToOut(c Config) {
 	if c.sqlFile != "" {
 		bytes, err := ioutil.ReadFile(c.sqlFile)
 		if err != nil {
-			g.LogErrorExit(err)
+			return g.Error(err, "Could not ReadFile: "+c.sqlFile)
 		}
 		sql = string(bytes)
 	}
@@ -154,63 +214,97 @@ func runDbToOut(c Config) {
 		)
 	}
 
-	stream, err := srcConn.BulkStream(sql)
-	g.LogErrorExit(err)
+	stream, err := srcConn.BulkExportStream(sql)
+	if err != nil {
+		return g.Error(err, "Could not BulkStream: "+sql)
+	}
 
 	cnt, err := csv.WriteStream(stream)
-	g.LogErrorExit(err)
+	if err != nil {
+		return g.Error(err, "Could not WriteStream")
+	}
+
 	g.Log(g.F("wrote %d rows [%s r/s]", cnt, getRate(cnt)))
 
 	srcConn.Close()
+	return nil
 }
 
-func runInToDB(c Config) {
+// create temp table
+// load into temp table
+// insert / upsert / replace into target table
+func runFileToDB(c Config) (err error) {
 	start = time.Now()
 	tgtConn := g.GetConn(c.tgtDB)
-	err := tgtConn.Connect()
-	g.LogErrorExit(err)
+	err = tgtConn.Connect()
+	if err != nil {
+		return g.Error(err, "Could not connect to: "+tgtConn.GetType())
+	}
 
 	csv := g.CSV{File: c.file}
 	stream, err := csv.ReadStream()
-	g.LogErrorExit(err)
+	if err != nil {
+		return g.Error(err, "Could not ReadStream")
+	}
+
+	tgtConn.SetProp("s3Bucket", c.s3Bucket)
+
+	c.tgtTableTmp = c.tgtTable + g.RandString("alpha", 3)
 
 	if c.drop {
 		d := g.Dataset{Columns: stream.Columns, Rows: stream.Buffer}
-		newDdl, err := tgtConn.GenerateDDL(c.tgtTable, d)
+		c.tgtTableDDL, err = tgtConn.GenerateDDL(c.tgtTable, d)
+		if err != nil {
+			return g.Error(err, "Could not create table "+c.tgtTable)
+		}
 
 		err = tgtConn.DropTable(c.tgtTable)
-		g.LogErrorExit(err)
+		if err != nil {
+			return g.Error(err, "Could not drop table "+c.tgtTable)
+		}
 
-		_, err = tgtConn.Db().Exec(newDdl)
-		g.LogErrorExit(err)
+		_, err = tgtConn.Db().Exec(c.tgtTableDDL)
+		if err != nil {
+			return g.Error(err, "Could not execute SQL: "+c.tgtTableDDL)
+		}
 		g.Log("(re)created table " + c.tgtTable)
 	} else if c.truncate {
-		_, err = tgtConn.Db().Exec(`truncate table ` + c.tgtTable)
-		g.LogErrorExit(err)
+		sql := `truncate table ` + c.tgtTable
+		_, err = tgtConn.Db().Exec(sql)
+		if err != nil {
+			return g.Error(err, "Could not execute SQL: "+sql)
+		}
 		g.Log("truncated table " + c.tgtTable)
 	}
 
 	g.Log("streaming inserts")
 	// stream.SetProgressBar()
-	cnt, err := tgtConn.InsertStream(c.tgtTable, stream)
-	g.LogErrorExit(err)
+	cnt, err := tgtConn.BulkImportStream(c.tgtTable, stream)
+	if err != nil {
+		return g.Error(err, "Could not InsertStream: "+c.tgtTable)
+	}
 	g.Log(g.F("inserted %d rows [%s r/s]", cnt, getRate(cnt)))
 
 	tgtConn.Close()
+	return nil
 }
 
-func runDbToDb(c Config) {
+func runDbToDb(c Config) (err error) {
 	start = time.Now()
 
 	// var srcConn, tgtConn PostgresConn
 	srcConn := g.GetConn(c.srcDB)
 	tgtConn := g.GetConn(c.tgtDB)
 
-	err := srcConn.Connect()
-	g.LogErrorExit(err)
+	err = srcConn.Connect()
+	if err != nil {
+		return g.Error(err, "Could not connect to: "+srcConn.GetType())
+	}
 
 	err = tgtConn.Connect()
-	g.LogErrorExit(err)
+	if err != nil {
+		return g.Error(err, "Could not connect to: "+tgtConn.GetType())
+	}
 
 	srcConn.SetProp("s3Bucket", c.s3Bucket)
 	tgtConn.SetProp("s3Bucket", c.s3Bucket)
@@ -220,7 +314,7 @@ func runDbToDb(c Config) {
 	if c.sqlFile != "" {
 		bytes, err := ioutil.ReadFile(c.sqlFile)
 		if err != nil {
-			g.LogErrorExit(err)
+			return g.Error(err, "Could not ReadFile: "+c.sqlFile)
 		}
 		sql = string(bytes)
 	}
@@ -234,33 +328,50 @@ func runDbToDb(c Config) {
 		)
 	}
 
-	stream, err := srcConn.BulkStream(sql)
-	g.LogErrorExit(err)
+	stream, err := srcConn.BulkExportStream(sql)
+	if err != nil {
+		return g.Error(err, "Could not BulkStream: "+sql)
+	}
+
+	c.tgtTableTmp = c.tgtTable + g.RandString("alpha", 3)
 
 	if c.drop {
 		d := g.Dataset{Columns: stream.Columns, Rows: stream.Buffer}
-		newDdl, err := tgtConn.GenerateDDL(c.tgtTable, d)
+		c.tgtTableDDL, err = tgtConn.GenerateDDL(c.tgtTable, d)
+		if err != nil {
+			return g.Error(err, "Could not create table "+c.tgtTable)
+		}
 
 		err = tgtConn.DropTable(c.tgtTable)
-		g.LogErrorExit(err)
+		if err != nil {
+			return g.Error(err, "Could not drop table "+c.tgtTable)
+		}
 
-		_, err = tgtConn.Db().Exec(newDdl)
-		g.LogErrorExit(err)
+		_, err = tgtConn.Db().Exec(c.tgtTableDDL)
+		if err != nil {
+			return g.Error(err, "Could not execute SQL: "+c.tgtTableDDL)
+		}
 		g.Log("created table " + c.tgtTable)
 	} else if c.truncate {
-		_, err = tgtConn.Db().Exec(`truncate table ` + c.srcTable)
-		g.LogErrorExit(err)
+		sql := `truncate table ` + c.srcTable
+		_, err = tgtConn.Db().Exec(sql)
+		if err != nil {
+			return g.Error(err, "Could not execute SQL: "+sql)
+		}
 		g.Log("truncated table " + c.tgtTable)
 	}
 
 	g.Log("streaming inserts")
 	// stream.SetProgressBar()
-	cnt, err := tgtConn.InsertStream(c.tgtTable, stream)
-	g.LogErrorExit(err)
+	cnt, err := tgtConn.BulkImportStream(c.tgtTable, stream)
+	if err != nil {
+		return g.Error(err, "Could not InsertStream: "+c.tgtTable)
+	}
 	g.Log(g.F("inserted %d rows [%s r/s]", cnt, getRate(cnt)))
 
 	srcConn.Close()
 	tgtConn.Close()
+	return nil
 }
 
 func getRate(cnt uint64) string {

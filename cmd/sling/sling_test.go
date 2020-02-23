@@ -3,21 +3,20 @@ package main
 import (
 	"bufio"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 	"testing"
 
 	g "github.com/flarco/gxutil"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
 type testDB struct {
-	name   string
-	URL    string
-	table  string
-	conn   g.Connection
-	schema string
+	name  string
+	URL   string
+	table string
+	conn  g.Connection
 }
 
 var (
@@ -27,32 +26,30 @@ var (
 var DBs = []*testDB{
 	&testDB{
 		// https://github.com/lib/pq
-		name:   "Postgres",
-		URL:    os.Getenv("POSTGRES_URL"),
-		table:  "public.test1",
-		schema: "public",
-	},
-
-	&testDB{
-		name:   "SQLite",
-		URL:    "file:./test.db",
-		table:  "main.test1",
-		schema: "main",
+		name:  "Postgres",
+		URL:   os.Getenv("POSTGRES_URL"),
+		table: "public.test1",
 	},
 
 	// &testDB{
-	// 	// https://github.com/lib/pq
-	// 	name:   "Redshift",
-	// 	URL:    os.Getenv("REDSHIFT_URL"),
-	// 	table:  "public.test1",
-	// 	schema: "public",
+	// 	// https://github.com/mattn/go-sqlite3
+	// 	name:  "SQLite",
+	// 	URL:   "file:./test.db",
+	// 	table: "main.test1",
 	// },
 
 	// &testDB{
 	// 	// https://github.com/godror/godror
 	// 	name:  "Oracle",
 	// 	URL:   os.Getenv("ORACLE_URL"),
-	// 	table: "public.test1",
+	// 	table: "system.test1",
+	// },
+
+	// &testDB{
+	// 	// https://github.com/denisenkom/go-mssqldb
+	// 	name:  "MySQL",
+	// 	URL:   os.Getenv("MYSQL_URL"),
+	// 	table: "mysql.test1",
 	// },
 
 	// &testDB{
@@ -63,28 +60,31 @@ var DBs = []*testDB{
 	// },
 
 	// &testDB{
-	// 	// https://github.com/denisenkom/go-mssqldb
-	// 	name:  "MySQL",
-	// 	URL:   os.Getenv("MYSQL_URL"),
-	// 	table: "public.test1",
-	// },
-
-	// &testDB{
-	// 	// https://github.com/mattn/go-sqlite3
-	// 	name:  "SQLite",
-	// 	URL:   os.Getenv("SQLITE_URL"),
-	// 	table: "public.test1",
-	// },
-
-	// &testDB{
 	// 	// https://github.com/snowflakedb/gosnowflake
 	// 	name:  "Snowflake",
 	// 	URL:   os.Getenv("SNOWFLAKE_URL"),
 	// 	table: "public.test1",
 	// },
+
+	&testDB{
+		// https://github.com/lib/pq
+		name:  "Redshift",
+		URL:   os.Getenv("REDSHIFT_URL"),
+		table: "public.test1",
+	},
 }
 
 func init() {
+	// Log as JSON instead of the default ASCII formatter.
+	log.SetFormatter(&log.JSONFormatter{})
+
+	// Output to stdout instead of the default stderr
+	// Can be any io.Writer, see below for File example
+	log.SetOutput(os.Stderr)
+
+	// Only log the warning severity or above.
+	log.SetLevel(log.WarnLevel)
+
 	for _, db := range DBs {
 		if db.URL == "" {
 			log.Fatal("No Env Var URL for " + db.name)
@@ -95,7 +95,6 @@ func init() {
 }
 
 func TestInToDb(t *testing.T) {
-	// csvFile := "tests/test1.1.csv.gz"
 	csvFile := "tests/test1.csv"
 	testFile1, err := os.Open(csvFile)
 	if err != nil {
@@ -118,8 +117,13 @@ func TestInToDb(t *testing.T) {
 			tgtDB:    tgtDB.URL,
 			tgtTable: tgtDB.table,
 			drop:     true,
+			s3Bucket: os.Getenv("S3_BUCKET"),
 		}
-		runInToDB(cfg)
+		err = runFileToDB(cfg)
+		if err != nil {
+			assert.NoError(t, err)
+			return
+		}
 	}
 }
 
@@ -139,8 +143,13 @@ func TestDbToDb(t *testing.T) {
 				tgtDB:    tgtDB.URL,
 				tgtTable: tgtDB.table + "_copy",
 				drop:     true,
+				s3Bucket: os.Getenv("S3_BUCKET"),
 			}
-			runDbToDb(cfg)
+			err = runDbToDb(cfg)
+			if err != nil {
+				assert.NoError(t, err)
+				return
+			}
 		}
 	}
 }
@@ -163,8 +172,13 @@ func TestDbToOut(t *testing.T) {
 			srcTable: srcTable,
 			file:     testFile2,
 			drop:     true,
+			s3Bucket: os.Getenv("S3_BUCKET"),
 		}
-		runDbToOut(cfg)
+		err = runDbToFile(cfg)
+		if err != nil {
+			assert.NoError(t, err)
+			return
+		}
 
 		testFile2, err = os.Open(filePath2)
 		assert.NoError(t, err)
@@ -177,11 +191,20 @@ func TestDbToOut(t *testing.T) {
 			if equal {
 				err = os.Remove(filePath2)
 				assert.NoError(t, err)
-				srcDB.conn = g.GetConn(srcDB.URL)
-				srcDB.conn.Connect()
-				srcDB.conn.DropTable(srcTable)
-				srcDB.conn.DropTable(srcTableCopy)
-				srcDB.conn.Close()
+
+				conn := g.GetConn(srcDB.URL)
+
+				err = conn.Connect()
+				assert.NoError(t, err)
+
+				err = conn.DropTable(srcTable)
+				assert.NoError(t, err)
+
+				err = conn.DropTable(srcTableCopy)
+				assert.NoError(t, err)
+
+				err = conn.Close()
+				assert.NoError(t, err)
 			}
 		} else {
 			testFile1Lines := len(strings.Split(string(testFile1Bytes), "\n"))
@@ -191,6 +214,8 @@ func TestDbToOut(t *testing.T) {
 			if equal {
 				err = os.Remove(filePath2)
 				os.Remove(strings.ReplaceAll(srcDB.URL, "file:", ""))
+			} else {
+				println("Not equal for " + srcDB.name)
 			}
 		}
 	}

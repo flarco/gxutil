@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"reflect"
 	"strconv"
@@ -32,6 +33,11 @@ var (
 
 	// AlertEmail is the email address to send errors to
 	AlertEmail = os.Getenv("ALERT_EMAIL")
+)
+
+const (
+	alphaRunes        = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	aplhanumericRunes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 )
 
 // GetType : return the type of an interface
@@ -85,6 +91,11 @@ func Rm(format string, m map[string]interface{}) string {
 // PrintV prints the value of object
 func PrintV(v interface{}) {
 	println(F("%#v", v))
+}
+
+// PrintT prints the type of object
+func PrintT(v interface{}) {
+	println(F("%T", v))
 }
 
 // Propagate is a modified version of stacktrace Propagate
@@ -196,7 +207,7 @@ func LogCCyan(text string) { LogC(text, "cyan", os.Stderr) }
 // LogError handles logging of an error, useful for reporting
 func LogError(E error) {
 	if E != nil {
-		LogCRedErr(E.Error())
+		LogCRedErr(Propagate(E, E.Error()).Error())
 	}
 }
 
@@ -204,7 +215,7 @@ func LogError(E error) {
 func LogErrorExit(E error) {
 	if E != nil {
 		LogCRedErr(E.Error())
-		log.Fatal(E)
+		log.Fatal(Propagate(E, E.Error()))
 	}
 }
 
@@ -280,4 +291,20 @@ func Tee(reader io.Reader, limit int) io.Reader {
 	}()
 
 	return pipeR
+}
+
+// RandString returns a random string of len n with the provided char set
+// charset can be `aplha` or `aplhanumeric`
+func RandString(charset string, n int) string {
+	b := make([]byte, n)
+	letterBytes := alphaRunes
+	if charset == "aplhanumeric" {
+		letterBytes = aplhanumericRunes
+	} 
+
+	for i := range b {
+		b[i] = letterBytes[rand.Int63()%int64(len(letterBytes))]
+	}
+	
+	return string(b)
 }

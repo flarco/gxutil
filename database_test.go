@@ -1,12 +1,14 @@
 package gxutil
 
 import (
-	"log"
+	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/spf13/cast"
 	"github.com/stretchr/testify/assert"
 	// "github.com/gobuffalo/packr"
 )
@@ -28,8 +30,8 @@ type place struct {
 	Telcode int64  `json:"telcode"`
 }
 
-type transactions struct {
-	Date                time.Time `json:"date" `
+type transact struct {
+	Datetime            time.Time `json:"date" `
 	Description         string    `json:"description"`
 	OriginalDescription string    `json:"original_description"`
 	Amount              float64   `json:"amount"`
@@ -41,78 +43,164 @@ type transactions struct {
 }
 
 type testDB struct {
-	conn       Connection
-	name       string
-	URL        string
-	viewDDL    string
-	schema     string
-	placeDDL   string
-	placeVwDDL string
+	conn          Connection
+	name          string
+	URL           string
+	schema        string
+	transactDDL   string
+	personDDL     string
+	placeDDL      string
+	placeIndex    string
+	placeVwDDL    string
+	placeVwSelect string
 }
 
-var DBs = []*testDB{
-	&testDB{
-		name:       "Postgres",
-		URL:        os.Getenv("POSTGRES_URL"),
-		viewDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
-		schema:     "public",
-		placeDDL:   "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
-		placeVwDDL: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
+var DBs = map[string]*testDB{
+	"postgres": &testDB{
+		name:        "postgres",
+		URL:         os.Getenv("POSTGRES_URL"),
+		schema:      "public",
+		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+		placeDDL:    "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
+		placeIndex: `CREATE INDEX idx_country_city
+		ON place(country, city)`,
+		placeVwDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
+		placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
 	},
-	&testDB{
-		name: "SQLite",
-		URL:  "file:./test.db",
-		viewDDL: `create view place_vw as select * from place where telcode = 65`,
-		schema:     "main",
-		placeDDL:   "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
-		placeVwDDL: "CREATE VIEW place_vw as select * from place where telcode = 65",
+
+	"sqlite3": &testDB{
+		name:   "sqlite3",
+		URL:    "file:./test.db",
+		schema: "main",
+
+		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+		placeDDL:    "CREATE TABLE \"place\" (\"country\" varchar(255),\"city\" varchar(255),\"telcode\" bigint )",
+		placeIndex: `CREATE INDEX idx_country_city
+		ON place(country, city)`,
+		placeVwDDL:    "CREATE VIEW place_vw as select * from place where telcode = 65",
+		placeVwSelect: "CREATE VIEW place_vw as select * from place where telcode = 65",
+	},
+
+	"mysql": &testDB{
+		name:          "mysql",
+		URL:           os.Getenv("MYSQL_URL"),
+		schema:        "mysql",
+		transactDDL:   `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+		personDDL:     `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+		placeDDL:      "CREATE TABLE `place` (\n  `country` varchar(255) DEFAULT NULL,\n  `city` varchar(255) DEFAULT NULL,\n  `telcode` decimal(10,0) DEFAULT NULL,\n  KEY `idx_country_city` (`country`,`city`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+		placeIndex:    `select 1`, //`CREATE INDEX idx_country_city ON place(country, city)`,
+		placeVwDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
+		placeVwSelect: "CREATE ALGORITHM=UNDEFINED DEFINER=`admin`@`%` SQL SECURITY DEFINER VIEW `place_vw` AS select `place`.`country` AS `country`,`place`.`city` AS `city`,`place`.`telcode` AS `telcode` from `place` where (`place`.`telcode` = 65)",
+	},
+
+	// "sqlserver": &testDB{
+	// 	name: "sqlserver",
+	// 	URL:  os.Getenv("MSSQL_URL"),
+	// 	schema:     "public",
+	// 	transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+	// 	personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+	// 	placeDDL:   "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
+	// 	placeIndex:    `CREATE INDEX idx_country_city
+	// 	ON place(country, city)`,
+	// 	placeVwDDL:    `create or replace view place_vw as select * from place where telcode = 65`,
+	// 	placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
+	// },
+
+	"oracle": &testDB{
+		name:        "oracle",
+		URL:         os.Getenv("ORACLE_URL"),
+		schema:      "system",
+		transactDDL: `CREATE TABLE transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+		personDDL:   `CREATE TABLE person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+		placeDDL:    "\n  CREATE TABLE \"SYSTEM\".\"PLACE\" \n   (\t\"COUNTRY\" VARCHAR2(255), \n\t\"CITY\" VARCHAR2(255), \n\t\"TELCODE\" NUMBER(*,0)\n   ) PCTFREE 10 PCTUSED 40 INITRANS 1 MAXTRANS 255 NOCOMPRESS LOGGING\n  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645\n  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)\n  TABLESPACE \"SYSTEM\" ",
+		placeIndex: `CREATE INDEX idx_country_city 
+		ON place(country, city)`,
+		placeVwDDL:    "CREATE VIEW place_vw as select * from place where telcode = 65",
+		placeVwSelect: "select \"COUNTRY\",\"CITY\",\"TELCODE\" from place where telcode = 65",
+	},
+
+	"redshift": &testDB{
+		name:        "redshift",
+		URL:         os.Getenv("REDSHIFT_URL"),
+		schema:      "public",
+		transactDDL: `CREATE TABLE public.transact (date_time date, description varchar(255), original_description varchar(255), amount decimal(10,5), transaction_type varchar(255), category varchar(255), account_name varchar(255), labels varchar(255), notes varchar(255) )`,
+		personDDL:   `CREATE TABLE public.person (first_name varchar(255), last_name varchar(255), email varchar(255), CONSTRAINT person_first_name PRIMARY KEY (first_name) )`,
+		placeDDL:    "CREATE TABLE public.place\n(\n    \"country\" text NULL,\n    \"city\" text NULL,\n    \"telcode\" bigint NULL\n)",
+		placeIndex: `CREATE INDEX idx_country_city
+		ON place(country, city)`,
+		placeVwDDL:    `create or replace view public.place_vw as select * from place where telcode = 65`,
+		placeVwSelect: " SELECT place.country,\n    place.city,\n    place.telcode\n   FROM place\n  WHERE (place.telcode = 65);",
 	},
 }
 
-func init() {
-	for _, db := range DBs {
-		if db.URL == "" {
-			log.Fatal("No Env Var URL for " + db.name)
-		} else if db.name == "SQLite" {
-			os.Remove(strings.ReplaceAll(db.URL, "file:", ""))
-		}
-		db.conn = GetConn(db.URL)
-		db.conn.Connect()
-	}
+func TestPostgres(t *testing.T) {
+	DBTest(t, DBs["postgres"])
 }
 
-func TestDBs(t *testing.T) {
-	for _, db := range DBs {
-		DBTest(t, db)
-		if db.name == "SQLite" {
-			os.Remove(strings.ReplaceAll(db.URL, "file:", ""))
-		}
-	}
+func TestSQLite(t *testing.T) {
+	os.Remove(strings.ReplaceAll(DBs["sqlite3"].URL, "file:", ""))
+	DBTest(t, DBs["sqlite3"])
+}
+
+func TestMySQL(t *testing.T) {
+	DBTest(t, DBs["mysql"])
+}
+
+func TestOracle(t *testing.T) {
+	DBTest(t, DBs["oracle"])
+}
+
+func TestRedshift(t *testing.T) {
+	// DBTest(t, DBs["redshift"])
+}
+
+func TestSqlServer(t *testing.T) {
+	// DBTest(t, DBs["sqlserver"])
 }
 
 func DBTest(t *testing.T, db *testDB) {
 	println("Testing " + db.name)
-
-	conn := db.conn
-	gConn, err := conn.GetGormConn()
+	if db.URL == "" {
+		assert.Error(t, errors.New("No Env Var URL for "+db.name))
+		return
+	}
+	conn := GetConn(db.URL)
+	err := conn.Connect()
 	assert.NoError(t, err)
 
-	err = conn.DropTable("person", "place", "transactions")
+	err = conn.DropTable(db.schema+".person", db.schema+".place", db.schema+".transact")
 	assert.NoError(t, err)
 
-	// conn.Db().MustExec(tablesDDL)
-	gConn.SingularTable(true)
-	gConn.AutoMigrate(&person{}, &place{}, &transactions{})
-	conn.Db().MustExec(db.viewDDL)
+	err = conn.DropView(db.schema + ".place_vw")
+	assert.NoError(t, err)
+
+	// gConn, err := conn.GetGormConn()
+	// assert.NoError(t, err)
+	// gConn.SingularTable(true)
+	// gConn.AutoMigrate(&person{}, &place{}, &transact{})
+
+	conn.Db().MustExec(db.transactDDL)
+	conn.Db().MustExec(db.personDDL)
+	conn.Db().MustExec(db.placeDDL)
+	conn.Db().MustExec(db.placeVwDDL)
+	if db.name != "redshift" {
+		conn.Db().MustExec(db.placeIndex)
+	}
+
+	personInsertStatement := conn.GenerateInsertStatement("person", []string{"first_name", "last_name", "email"})
+	placeInsertStatement := conn.GenerateInsertStatement("place", []string{"country", "city", "telcode"})
+	transactInsertStatement := conn.GenerateInsertStatement("transact", []string{"date_time", "description", "amount"})
 
 	tx := conn.Db().MustBegin()
-	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "Jason", "Moiron", "jmoiron@jmoiron.net")
-	tx.MustExec("INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)", "John", "Doe", "johndoeDNE@gmail.net")
-	tx.MustExec("INSERT INTO place (country, city, telcode) VALUES ($1, $2, $3)", "United States", "New York", "1")
-	tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Hong Kong", "852")
-	tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Singapore", "65")
-	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2019-10-10", "test\" \nproduct", "65.657")
-	tx.MustExec("INSERT INTO transactions (date, description, amount) VALUES ($1, $2, $3)", "2020-10-10", "new \nproduct", "5.657")
+	tx.MustExec(personInsertStatement, "Jason", "Moiron", "jmoiron@jmoiron.net")
+	tx.MustExec(personInsertStatement, "John", "Doe", "johndoeDNE@gmail.net")
+	tx.MustExec(placeInsertStatement, "United States", "New York", "1")
+	tx.MustExec(placeInsertStatement, "Hong Kong", nil, "852")
+	tx.MustExec(placeInsertStatement, "Singapore", nil, "65")
+	tx.MustExec(transactInsertStatement, cast.ToTime("2019-10-10"), "test\" \nproduct", 65.657)
+	tx.MustExec(transactInsertStatement, cast.ToTime("2020-10-10"), "new \nproduct", 5.657)
 	tx.Commit()
 
 	// Test Streaming
@@ -142,10 +230,10 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
 
-	data, err = conn.Query(`select * from transactions`)
+	data, err = conn.Query(`select * from transact`)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, 65.657, data.Records()[0]["amount"])
+	assert.Equal(t, 65.657, cast.ToFloat64(data.Records()[0]["amount"]))
 
 	// GetSchemas
 	data, err = conn.GetSchemas()
@@ -158,7 +246,7 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.Greater(t, len(data.Rows), 0)
 
 	// GetViews
-	data, err = conn.GetViews("information_schema")
+	data, err = conn.GetViews(db.schema)
 	assert.NoError(t, err)
 	assert.Greater(t, len(data.Rows), 0)
 	assert.Greater(t, data.Duration, 0.0)
@@ -167,59 +255,72 @@ func DBTest(t *testing.T, db *testDB) {
 	data, err = conn.GetColumns(db.schema + ".person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Contains(t, []string{"text", "varchar(255)"}, data.Records()[0]["data_type"])
+	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2", "character varying", "varchar"}, data.Records()[0]["data_type"])
 
-	// GetPrimarkKeys
-	data, err = conn.GetPrimarkKeys(db.schema + ".person")
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 1)
-	assert.Equal(t, "first_name", data.Records()[0]["column_name"])
+	// GetPrimaryKeys
+	if db.name != "redshift" {
+		data, err = conn.GetPrimaryKeys(db.schema + ".person")
+		assert.NoError(t, err)
+		assert.Len(t, data.Rows, 1)
+		assert.Equal(t, "first_name", strings.ToLower(cast.ToString(data.Records()[0]["column_name"])))
+	}
 
 	// GetIndexes
-	data, err = conn.GetIndexes(db.schema + ".place")
-	assert.NoError(t, err)
-	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, "city", data.Records()[1]["column_name"])
+	if db.name != "redshift" {
+		data, err = conn.GetIndexes(db.schema + ".place")
+		assert.NoError(t, err)
+		assert.Len(t, data.Rows, 2)
+		assert.Equal(t, "city", strings.ToLower(cast.ToString(data.Records()[1]["column_name"])))
+	}
 
 	// GetColumnsFull
 	data, err = conn.GetColumnsFull(db.schema + ".place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, "bigint", data.Records()[2]["data_type"])
+	assert.Contains(t, []string{"bigint", "NUMBER", "decimal"}, data.Records()[2]["data_type"])
 
 	// GetDDL of table
-	ddl, err := conn.GetDDL(db.schema + ".place")
-	assert.NoError(t, err)
-	assert.Equal(t, db.placeDDL, ddl)
+	if db.name != "redshift" {
+		ddl, err := conn.GetDDL(db.schema + ".place")
+		assert.NoError(t, err)
+		assert.Equal(t, db.placeDDL, ddl)
+	}
 
 	// GetDDL of view
-	ddl, err = conn.GetDDL(db.schema + ".place_vw")
-	assert.NoError(t, err)
-	assert.Equal(t, db.placeVwDDL, ddl)
+	if db.name != "redshift" {
+		ddl, err := conn.GetDDL(db.schema + ".place_vw")
+		assert.NoError(t, err)
+		assert.Equal(t, db.placeVwSelect, ddl)
+	}
 
 	// load Csv from test file
-	csv1 := CSV{
-		Path: "templates/test1.csv",
-	}
+	csv1 := CSV{Path: "test/test1.csv"}
 
 	stream, err = csv1.ReadStream()
 	assert.NoError(t, err)
 
 	csvTable := db.schema + ".test1"
-	ddl, err = conn.GenerateDDL(csvTable, Dataset{Columns: stream.Columns, Rows: stream.Buffer})
+	err = conn.DropTable(csvTable)
 	assert.NoError(t, err)
 
-	_, err = conn.Db().Exec(ddl)
+	ddl, err := conn.GenerateDDL(csvTable, Dataset{Columns: stream.Columns, Rows: stream.Buffer})
 	assert.NoError(t, err)
+	ok := assert.NotEmpty(t, ddl)
 
-	// import to database
-	_, err = conn.InsertStream(csvTable, stream)
-	assert.NoError(t, err)
+	if ok {
+		_, err = conn.Db().Exec(ddl)
+		assert.NoError(t, err)
 
-	// select back to assert equality
-	count, err := conn.GetCount(csvTable)
-	assert.NoError(t, err)
-	assert.Equal(t, uint64(1000), count)
+		// import to database
+		conn.SetProp("s3Bucket", os.Getenv("S3_BUCKET"))
+		_, err = conn.InsertStream(csvTable, stream)
+		assert.NoError(t, err)
+
+		// select back to assert equality
+		count, err := conn.GetCount(csvTable)
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(1000), count)
+	}
 
 	// Test Schemata
 	sData, err := conn.GetSchemata(db.schema)
@@ -229,7 +330,7 @@ func DBTest(t *testing.T, db *testDB) {
 	assert.Contains(t, sData.Tables, "place_vw")
 	assert.Contains(t, conn.Schemata().Tables, db.schema+".person")
 	assert.Len(t, sData.Tables["person"].Columns, 3)
-	assert.Contains(t, []string{"text", "varchar(255)"}, sData.Tables["person"].ColumnsMap["email"].Type)
+	assert.Contains(t, []string{"text", "varchar(255)", "VARCHAR2", "character varying", "varchar"}, sData.Tables["person"].ColumnsMap["email"].Type)
 	assert.Equal(t, true, sData.Tables["place_vw"].IsView)
 	assert.Equal(t, int64(3), conn.Schemata().Tables[db.schema+".person"].ColumnsMap["email"].Position)
 
@@ -248,36 +349,68 @@ func DBTest(t *testing.T, db *testDB) {
 	data, err = conn.RunAnalysis("table_join_match", values)
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Contains(t, []interface{}{0.0, int64(0)}, data.Records()[0]["t1_null_cnt"])
-	assert.Equal(t, 100.0, data.Records()[1]["match_rate"])
+	assert.Contains(t, []interface{}{0.0, int64(0), "0"}, data.Records()[0]["t1_null_cnt"])
+	assert.Equal(t, 100.0, cast.ToFloat64(data.Records()[1]["match_rate"]))
 
 	// RunAnalysisTable field_stat
 	data, err = conn.RunAnalysisTable("table_count", db.schema+".person", db.schema+".place")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 2)
-	assert.Equal(t, int64(2), data.Records()[0]["cnt"])
-	assert.Equal(t, int64(3), data.Records()[1]["cnt"])
+	assert.EqualValues(t, int64(2), data.Records()[0]["cnt"])
+	assert.EqualValues(t, int64(3), data.Records()[1]["cnt"])
 
 	// RunAnalysisField field_stat
 	data, err = conn.RunAnalysisField("field_stat", db.schema+".person")
 	assert.NoError(t, err)
 	assert.Len(t, data.Rows, 3)
-	assert.Equal(t, int64(2), data.Records()[0]["tot_cnt"])
-	assert.Equal(t, int64(0), data.Records()[1]["f_dup_cnt"])
+	assert.EqualValues(t, int64(2), data.Records()[0]["tot_cnt"])
+	assert.EqualValues(t, int64(0), data.Records()[1]["f_dup_cnt"])
+
+	// Extract / Load Test
+	if db.name != "sqlite3" {
+		ELTest(t, db, csvTable)
+	}
 
 	// Drop all tables
-	err = conn.DropTable("person", "place", "transactions", "test1")
+	err = conn.DropTable("person", "place", "transact", "test1")
 	assert.NoError(t, err)
 
-	conn.Close()
+	if db.name != "sqlite3" {
+		// test sleep function
+		sleepSQL := R(
+			conn.GetTemplateValue("function.sleep"),
+			"seconds", "1",
+		)
+		dd, err := conn.Query(sleepSQL)
+		assert.Greater(t, dd.Duration, 1.0)
+		assert.NoError(t, err)
+
+		// Test cancel query
+		cancelDone := make(chan bool)
+		ctx, cancel := context.WithCancel(conn.Context().ctx)
+		go func() {
+			_, err := conn.QueryContext(ctx, sleepSQL)
+			assert.Error(t, err)
+			cancelDone <- true
+		}()
+
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+		<-cancelDone // wait for cancel to be done
+	}
+
+	err = conn.Close()
+	assert.NoError(t, err)
 }
 
-func PGtoPGTest(t *testing.T, srcTable string) {
+func ELTest(t *testing.T, db *testDB, srcTable string) {
 	tgtTable := srcTable + "2"
+	_, sTable := splitTableFullName(srcTable)
+	_, tTable := splitTableFullName(tgtTable)
 
 	// var srcConn, tgtConn PostgresConn
-	srcConn := GetConn(PostgresURL)
-	tgtConn := GetConn(PostgresURL)
+	srcConn := GetConn(db.URL)
+	tgtConn := GetConn(db.URL)
 
 	err := srcConn.Connect()
 	assert.NoError(t, err)
@@ -287,13 +420,19 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 
 	ddl, err := srcConn.GetDDL(srcTable)
 	assert.NoError(t, err)
-	newDdl := strings.Replace(ddl, srcTable, tgtTable, 1)
+	newDdl := strings.Replace(ddl, sTable, tTable, 1)
+	if db.name == "oracle" {
+		newDdl = strings.Replace(
+			ddl, strings.ToUpper(sTable),
+			strings.ToUpper(tTable), 1,
+		)
+	}
 
 	err = tgtConn.DropTable(tgtTable)
 	assert.NoError(t, err)
 
 	_, err = tgtConn.Db().Exec(newDdl)
-	assert.NoError(t, err)
+	assert.NoError(t, Error(err, newDdl))
 
 	stream, err := srcConn.StreamRows(`select * from ` + srcTable)
 	assert.NoError(t, err)
@@ -303,24 +442,26 @@ func PGtoPGTest(t *testing.T, srcTable string) {
 		assert.NoError(t, err)
 
 		data, err := tgtConn.RunAnalysisTable("table_count", srcTable, tgtTable)
-		assert.NoError(t, err)
-		assert.Equal(t, data.Records()[0]["cnt"], data.Records()[1]["cnt"])
+		if assert.NoError(t, err) {
+			assert.Equal(t, data.Records()[0]["cnt"], data.Records()[1]["cnt"])
+		}
 	}
 
-	// use Copy TO
+	// use Bulk
 	_, err = tgtConn.Query("truncate table " + tgtTable)
 	assert.NoError(t, err)
 
-	stream, err = srcConn.BulkStream(`select * from ` + srcTable)
+	stream, err = srcConn.BulkExportStream(`select * from ` + srcTable)
 	assert.NoError(t, err)
 
 	if err == nil {
-		_, err = tgtConn.InsertStream(tgtTable, stream)
+		_, err = tgtConn.BulkImportStream(tgtTable, stream)
 		assert.NoError(t, err)
 
 		data, err := tgtConn.RunAnalysisTable("table_count", srcTable, tgtTable)
-		assert.NoError(t, err)
-		assert.Equal(t, data.Records()[0]["cnt"], data.Records()[1]["cnt"])
+		if assert.NoError(t, err) {
+			assert.Equal(t, data.Records()[0]["cnt"], data.Records()[1]["cnt"])
+		}
 	}
 
 	err = tgtConn.DropTable(tgtTable)

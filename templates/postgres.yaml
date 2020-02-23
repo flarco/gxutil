@@ -1,5 +1,6 @@
 core:
   drop_table: drop table if exists {table} cascade
+  drop_view: drop view if exists {view}
   replace: insert into {table} ({names}) values ({values}) on conflict ({pk_fields}) do update set {set_fields}
   replace_temp: |
     insert into {table} ({names})
@@ -8,6 +9,8 @@ core:
     update {table} as t1 set {set_fields2}
     from (select * from {temp_table}) as t2
     where {pk_fields_equal}
+  insert: insert into {table} ({cols}) values ({values})
+  insert_temp: insert into {table} ({cols}) select {cols} from {temp_table}
   insert_ignore: insert into {table} ({names}) values ({values}) on conflict ({pk_fields}) do nothing
   insert_ignore_temp: insert into {table} ({names}) select {names} from {temp_table} on conflict ({pk_fields}) do nothing
   update_temp: |
@@ -15,6 +18,7 @@ core:
     from (select * from {temp_table}) as t2
     where {pk_fields_equal2}
   sample: SELECT {fields} FROM {table} TABLESAMPLE SYSTEM (50) limit {n}
+  rename_table: ALTER TABLE {table} RENAME TO {new_table}
 
 metadata:
     
@@ -137,7 +141,7 @@ metadata:
       and tables.table_name = cols.table_name
     order by cols.table_catalog, cols.table_schema, cols.table_name, cols.ordinal_position
   
-  ddl: "
+  ddl_table: "
     with tabledefinition as (
       SELECT 
         n.nspname, c.relname, a.attname AS column_name,
@@ -170,17 +174,20 @@ metadata:
         from tabledefinition
         group by nspname, relname
     )
-    , view_ddl as (
-      SELECT pg_get_viewdef(
-    to_regclass('{schema}.{table}'))::text as ddl
-    )
     select
-      case when view_ddl.ddl is null or view_ddl.ddl = 'Not a view'
-      then table_ddl.ddl
-      else view_ddl.ddl
-      end as ddl
-    from view_ddl, table_ddl
+      table_ddl.ddl as ddl
+    from table_ddl
     "
+  ddl_view: |
+    SELECT pg_get_viewdef(to_regclass('{schema}.{table}'))::text as ddl
+  
+  sessions:
+    select *
+    from pg_stat_activity
+    where state = 'active'
+
+  session_terminate:
+    select pg_terminate_backend({pid})
 
 analysis:
   field_chars: |
@@ -302,6 +309,7 @@ function:
   truncate_datef: trunc({field})
   date_to_int: trunc(extract(epoch from {field})/(60*60*24))::int
   number_to_int: round({field}, 0)
+  sleep: select pg_sleep({seconds})
 
 # native to general
 native_type_map:
@@ -319,6 +327,7 @@ native_type_map:
   json: "string"
   jsonb: "string"
   varbit: "string"
+  void: "string"
   name: "string"
   char: "string"
   varchar: "string"

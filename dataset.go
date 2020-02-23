@@ -3,6 +3,7 @@ package gxutil
 import (
 	"bufio"
 	"compress/gzip"
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"fmt"
@@ -16,6 +17,12 @@ import (
 	"github.com/spf13/cast"
 )
 
+// Context is to manage context
+type Context struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
 // Datastream is a stream of rows
 type Datastream struct {
 	Columns []Column
@@ -23,6 +30,7 @@ type Datastream struct {
 	Buffer  [][]interface{}
 	count   uint64
 	closed  bool
+	context Context
 }
 
 // Dataset is a query returned dataset
@@ -32,6 +40,22 @@ type Dataset struct {
 	Rows     [][]interface{}
 	SQL      string
 	Duration float64
+}
+
+// ColumnStats holds statistics for a column
+type ColumnStats struct {
+	minLen    int
+	maxLen    int
+	maxDecLen int
+	min       int64
+	max       int64
+	nullCnt   int64
+	intCnt    int64
+	decCnt    int64
+	boolCnt   int64
+	stringCnt int64
+	dateCnt   int64
+	totalCnt  int64
 }
 
 // WriteCsv writes to a csv file
@@ -70,11 +94,20 @@ func ParseString(s string) interface{} {
 		return i
 	}
 
+	// float
+	f, err := strconv.ParseFloat(s, 64)
+	if err == nil {
+		return f
+	}
+
 	// date layouts to try out
 	layouts := []string{
-		"2006-01-02 15:04:05",
 		"2006-01-02",
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04:05.000",
 		"2006-01-02T15:04:05.000Z",
+		"01-JAN-02",
+		"01-JAN-02 15:04:05",
 	}
 	for _, layout := range layouts {
 		t, err := time.Parse(layout, s)
@@ -83,17 +116,12 @@ func ParseString(s string) interface{} {
 		}
 	}
 
-	// float
-	f, err := strconv.ParseFloat(s, 64)
-	if err == nil {
-		return f
-	}
-
 	// boolean
-	b, err := strconv.ParseBool(s)
-	if err == nil {
-		return b
-	}
+	// causes issues in SQLite and Oracle
+	// b, err := strconv.ParseBool(s)
+	// if err == nil {
+	// 	return b
+	// }
 
 	return s
 }
@@ -181,7 +209,7 @@ func (data *Dataset) GetFields() []string {
 	fields := make([]string, len(data.Columns))
 
 	for j, column := range data.Columns {
-		fields[j] = column.Name
+		fields[j] = strings.ToLower(column.Name)
 	}
 
 	return fields
@@ -215,7 +243,7 @@ func (data *Dataset) setColumns(colTypes []*sql.ColumnType, NativeTypeMap map[st
 		}
 
 		data.Columns[i] = Column{
-			Name:     colType.Name(),
+			Name:     strings.ToLower(colType.Name()),
 			Position: int64(i + 1),
 			Type:     Type,
 			colType:  colType,
@@ -241,22 +269,7 @@ func (data *Dataset) Records() []map[string]interface{} {
 func (data *Dataset) InferColumnTypes() {
 	const N = 1000 // Sample Size
 
-	type ColumnStats struct {
-		minLen    int
-		maxLen    int
-		min       int64
-		max       int64
-		nullCnt   int64
-		intCnt    int64
-		decCnt    int64
-		boolCnt   int64
-		stringCnt int64
-		dateCnt   int64
-		totalCnt  int64
-	}
-
 	var columns []Column
-	var stats []ColumnStats
 
 	if len(data.Rows) == 0 {
 		return
@@ -267,8 +280,8 @@ func (data *Dataset) InferColumnTypes() {
 			Name:     field,
 			Position: int64(i + 1),
 			Type:     "string",
+			stats:    ColumnStats{},
 		})
-		stats = append(stats, ColumnStats{})
 	}
 
 	for i, row := range data.Rows {
@@ -278,41 +291,48 @@ func (data *Dataset) InferColumnTypes() {
 
 		for j, val := range row {
 			val = ParseString(cast.ToString(val))
-			stats[j].totalCnt++
+			columns[j].stats.totalCnt++
 
 			switch v := val.(type) {
 			case time.Time:
-				stats[j].dateCnt++
+				columns[j].stats.dateCnt++
 			case nil:
-				stats[j].nullCnt++
+				columns[j].stats.nullCnt++
 			case int, int8, int16, int32, int64:
-				stats[j].intCnt++
+				columns[j].stats.intCnt++
 				val0 := cast.ToInt64(val)
-				if val0 > stats[j].max {
-					stats[j].max = val0
+				if val0 > columns[j].stats.max {
+					columns[j].stats.max = val0
 				}
-				if val0 < stats[j].min {
-					stats[j].min = val0
+				if val0 < columns[j].stats.min {
+					columns[j].stats.min = val0
 				}
 			case float32, float64:
-				stats[j].decCnt++
+				columns[j].stats.decCnt++
 				val0 := cast.ToInt64(val)
-				if val0 > stats[j].max {
-					stats[j].max = val0
+				if val0 > columns[j].stats.max {
+					columns[j].stats.max = val0
 				}
-				if val0 < stats[j].min {
-					stats[j].min = val0
+				if val0 < columns[j].stats.min {
+					columns[j].stats.min = val0
 				}
+
+				valDec := cast.ToFloat64(val) - cast.ToFloat64(val0)
+				decLen := len(cast.ToString(valDec)) - 2
+				if decLen > columns[j].stats.maxDecLen {
+					columns[j].stats.maxDecLen = decLen
+				}
+
 			case bool:
-				stats[j].boolCnt++
+				columns[j].stats.boolCnt++
 			case string, []uint8:
-				stats[j].stringCnt++
+				columns[j].stats.stringCnt++
 				l := len(cast.ToString(val))
-				if l > stats[j].maxLen {
-					stats[j].maxLen = l
+				if l > columns[j].stats.maxLen {
+					columns[j].stats.maxLen = l
 				}
-				if l < stats[j].minLen {
-					stats[j].minLen = l
+				if l < columns[j].stats.minLen {
+					columns[j].stats.minLen = l
 				}
 
 			default:
@@ -322,20 +342,20 @@ func (data *Dataset) InferColumnTypes() {
 	}
 
 	for j := range data.GetFields() {
-		// PrintV(stats[j])
-		if stats[j].stringCnt > 0 || stats[j].nullCnt == stats[j].totalCnt {
-			if stats[j].maxLen > 255 {
+		// PrintV(columns[j].stats)
+		if columns[j].stats.stringCnt > 0 || columns[j].stats.nullCnt == columns[j].stats.totalCnt {
+			if columns[j].stats.maxLen > 255 {
 				columns[j].Type = "text"
 			} else {
 				columns[j].Type = "string"
 			}
-		} else if stats[j].boolCnt+stats[j].nullCnt == stats[j].totalCnt {
+		} else if columns[j].stats.boolCnt+columns[j].stats.nullCnt == columns[j].stats.totalCnt {
 			columns[j].Type = "bool"
-		} else if stats[j].intCnt+stats[j].nullCnt == stats[j].totalCnt {
+		} else if columns[j].stats.intCnt+columns[j].stats.nullCnt == columns[j].stats.totalCnt {
 			columns[j].Type = "integer"
-		} else if stats[j].dateCnt+stats[j].nullCnt == stats[j].totalCnt {
+		} else if columns[j].stats.dateCnt+columns[j].stats.nullCnt == columns[j].stats.totalCnt {
 			columns[j].Type = "datetime"
-		} else if stats[j].decCnt+stats[j].nullCnt == stats[j].totalCnt {
+		} else if columns[j].stats.decCnt+columns[j].stats.nullCnt == columns[j].stats.totalCnt {
 			columns[j].Type = "decimal"
 		}
 	}

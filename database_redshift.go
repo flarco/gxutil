@@ -2,6 +2,7 @@ package gxutil
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io/ioutil"
 	"os"
@@ -19,14 +20,14 @@ type RedshiftConn struct {
 	URL string
 }
 
-// Connect connects to a database using sqlx
-func (conn *RedshiftConn) Connect() error {
-
+// Init initiates the object
+func (conn *RedshiftConn) Init() error {
 	conn.BaseConn = BaseConn{
 		URL:  conn.URL,
 		Type: "redshift",
 	}
-	return conn.BaseConn.Connect()
+
+	return conn.BaseConn.Init()
 }
 
 func isRedshift(URL string) (isRs bool) {
@@ -51,7 +52,8 @@ func isRedshift(URL string) (isRs bool) {
 	return isRs
 }
 
-func (conn *RedshiftConn) unload(sql string) (s3Path string, err error) {
+// Unload unloads a query to S3
+func (conn *RedshiftConn) Unload(sql string) (s3Path string, err error) {
 
 	s3 := S3{
 		Bucket: conn.GetProp("s3Bucket"),
@@ -76,16 +78,20 @@ func (conn *RedshiftConn) unload(sql string) (s3Path string, err error) {
 		"aws_secret_access_key", AwsAccessKey,
 	)
 	_, err = txn.Exec(unloadSQL)
-	if err == nil {
-		Log(F("Unloaded to s3://%s/%s", s3.Bucket, s3Path))
+	if err != nil {
+		cleanSQL := strings.ReplaceAll(unloadSQL, AwsID, "*****")
+		cleanSQL = strings.ReplaceAll(cleanSQL, AwsAccessKey, "*****")
+		return s3Path, Error(err, "SQL Error:\n"+cleanSQL)
 	}
+
+	Log(F("Unloaded to s3://%s/%s", s3.Bucket, s3Path))
 
 	return s3Path, err
 }
 
-// BulkStream reads in bulk
-func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
-
+// BulkExportStream reads in bulk
+func (conn *RedshiftConn) BulkExportStream(sql string) (ds Datastream, err error) {
+	var mux sync.Mutex
 	maxWorkers := 5
 	workers := 0
 	done := 0
@@ -94,14 +100,20 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 		Bucket: conn.GetProp("s3Bucket"),
 	}
 
-	s3Path, err := conn.unload(sql)
-	LogErrorExit(err)
+	s3Path, err := conn.Unload(sql)
+	if err != nil {
+		return ds, Error(err, "Could not unload.")
+	}
 
 	s3PartPaths, err := s3.List(s3Path + "/")
-	LogErrorExit(err)
+	if err != nil {
+		return ds, Error(err, "Could not s3.List for "+s3Path+"/")
+	}
 
+	mainCtx, cancel := context.WithCancel(context.Background())
 	ds = Datastream{
-		Rows: make(chan []interface{}),
+		Rows:    make(chan []interface{}, 100000), // 100000 row limit in memory
+		context: Context{mainCtx, cancel},
 	}
 
 	decompressAndStream := func(s3PartPath string, dsMain *Datastream) {
@@ -114,31 +126,39 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 			time.Sleep(100 * time.Millisecond)
 		}
 
-		Log("Reading " + s3PartPath)
+		// Log(F("Reading from s3://%s/%s", s3.Bucket, s3PartPath))
 
 		gzReader, err := s3.ReadStream(s3PartPath)
-		LogErrorExit(err)
-
-		// reader, err := Decompress(gzReader)
-		// LogErrorExit(err)
-		// reader := Tee(reader0, 50)
+		LogError(Error(err, F("Could not s3.ReadStream for s3://%s/%s", s3.Bucket, s3PartPath)))
 
 		csvPart := CSV{Reader: gzReader}
 		dsPart, err := csvPart.ReadStream()
+		if err != nil {
+			LogError(Error(err, F("Could not csvPart.ReadStream() s3://%s/%s", s3.Bucket, s3PartPath)))
+		}
 
-		if dsMain.Columns == nil {
+		mux.Lock()
+		if dsMain.Columns == nil && len(dsPart.Buffer) > 0 {
 			dsMain.Columns = dsPart.Columns
 		}
+		mux.Unlock()
 
 		// foward to channel, rows will came in disorder
 		for row := range dsPart.Rows {
-			dsMain.Rows <- row
+			select {
+			case <-dsMain.context.ctx.Done():
+				break
+			case <-dsPart.context.ctx.Done():
+				break
+			default:
+				dsMain.Rows <- row
+			}
 		}
 		workers--
 		done++
 
 		if done == len(s3PartPaths) {
-			close(ds.Rows)
+			close(dsMain.Rows)
 		}
 	}
 
@@ -151,7 +171,7 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 
 	// loop until columns are parsed
 	for {
-		if ds.Columns != nil {
+		if ds.Columns != nil && ds.Columns[0].Type != "" {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -160,9 +180,9 @@ func (conn *RedshiftConn) BulkStream(sql string) (ds Datastream, err error) {
 	return ds, err
 }
 
-// InsertStream inserts a stream into a table.
+// BulkImportStream inserts a stream into a table.
 // For redshift we need to create CSVs in S3 and then use the COPY command.
-func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count uint64, err error) {
+func (conn *RedshiftConn) BulkImportStream(tableFName string, ds Datastream) (count uint64, err error) {
 	var wg sync.WaitGroup
 
 	s3 := S3{
@@ -178,32 +198,39 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 	}
 
 	if s3.Bucket == "" {
-		LogErrorExit(errors.New("Need to set 's3Bucket' to copy to redshift"))
+		return count, errors.New("Need to set 's3Bucket' to copy to redshift")
 	}
 
 	if AwsID == "" || AwsAccessKey == "" {
-		LogErrorExit(errors.New("Need to set env vars 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' to copy to redshift"))
+		return count, errors.New("Need to set env vars 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' to copy to redshift")
 	}
 
 	compressAndUpload := func(bytesData []byte, s3PartPath string, wg *sync.WaitGroup) {
 		defer wg.Done()
 		gzReader := Compress(bytes.NewReader(bytesData))
 		err := s3.WriteStream(s3PartPath, gzReader)
-		LogErrorExit(err)
+		if err != nil {
+			LogError(Error(err, F("could not upload to s3://%s/%s", s3.Bucket, s3PartPath)))
+			return
+		}
 		Log(F("uploaded to s3://%s/%s", s3.Bucket, s3PartPath))
 	}
 
 	err = s3.Delete(s3Path)
+	if err != nil {
+		return count, Error(err, "Could not s3.Delete: "+s3Path)
+	}
 
 	fileCount := 0
 	for {
 		fileCount++
 		s3PartPath := F("%s/%04d.gz", s3Path, fileCount)
-		LogErrorExit(err)
 
 		reader := ds.NewCsvReader(fileRowLimit)
 		bytesData, err := ioutil.ReadAll(reader)
-		LogErrorExit(err)
+		if err != nil {
+			return count, Error(err, "Could not ioutil.ReadAll")
+		}
 
 		// need to kick off threads to compress and upload
 		// separately to not slow query ingress.
@@ -227,10 +254,16 @@ func (conn *RedshiftConn) InsertStream(tableFName string, ds Datastream) (count 
 		"aws_secret_access_key", AwsAccessKey,
 	)
 	_, err = txn.Exec(sql)
-	LogErrorExit(err)
+	if err != nil {
+		cleanSQL := strings.ReplaceAll(sql, AwsID, "*****")
+		cleanSQL = strings.ReplaceAll(cleanSQL, AwsAccessKey, "*****")
+		return count, Error(err, "SQL Error:\n"+cleanSQL)
+	}
 
 	err = txn.Commit()
-	LogErrorExit(err)
+	if err != nil {
+		return count, Error(err, "Could not commit")
+	}
 
 	return ds.count, nil
 }

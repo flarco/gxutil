@@ -1,5 +1,6 @@
 core:
   drop_table: drop table if exists {table} cascade
+  drop_view: drop view if exists {view}
   replace: insert into {table} ({names}) values ({values}) on conflict ({pk_fields}) do update set {set_fields}
   replace_temp: |
     insert into {table} ({names})
@@ -15,6 +16,8 @@ core:
     from (select * from {temp_table}) as t2
     where {pk_fields_equal2}
   sample: SELECT {fields} FROM {table} TABLESAMPLE SYSTEM (50) limit {n}
+  rename_table: ALTER TABLE {table} RENAME TO {new_table}
+  set_schema: ALTER TABLE {table} SET SCHEMA {new_schema}
   copy_to: |
     COPY {tgt_table}
     FROM 's3://{s3_bucket}/{s3_path}'
@@ -25,20 +28,19 @@ core:
     to 's3://{s3_bucket}/{s3_path}/'
     credentials 'aws_access_key_id={aws_access_key_id};aws_secret_access_key={aws_secret_access_key}'
     HEADER gzip allowoverwrite CSV PARALLEL true
-  
+ 
 metadata:
     
   schemas: |
-    select schema_name
-    from information_schema.schemata
-    where catalog_name = ( select current_catalog )
-    order by schema_name
+    select s.nspname as schema_name
+    from pg_catalog.pg_namespace s
+    where s.nspname not like 'pg_temp_%'
+    order by s.nspname
     
   tables: |
     select table_name
     from information_schema.tables
     where table_type = 'BASE TABLE'
-      and table_catalog = ( select current_catalog )
       and table_schema = '{schema}'
     order by table_name
     
@@ -46,15 +48,13 @@ metadata:
     select table_name
     from information_schema.tables
     where table_type = 'VIEW'
-      and table_catalog = ( select current_catalog )
       and table_schema = '{schema}'
     order by table_name
 
   columns: |
     select column_name, data_type
     from information_schema.columns
-    where table_catalog = ( select current_catalog )
-      and table_schema = '{schema}'
+    where table_schema = '{schema}'
       and table_name = '{table}'
     order by ordinal_position
 
@@ -147,7 +147,7 @@ metadata:
       and tables.table_name = cols.table_name
     order by cols.table_catalog, cols.table_schema, cols.table_name, cols.ordinal_position
   
-  ddl: "
+  ddl_table: "
     with tabledefinition as (
       SELECT 
         n.nspname, c.relname, a.attname AS column_name,
@@ -180,17 +180,12 @@ metadata:
         from tabledefinition
         group by nspname, relname
     )
-    , view_ddl as (
-      SELECT pg_get_viewdef(
-    to_regclass('{schema}.{table}'))::text as ddl
-    )
     select
-      case when view_ddl.ddl is null or view_ddl.ddl = 'Not a view'
-      then table_ddl.ddl
-      else view_ddl.ddl
-      end as ddl
-    from view_ddl, table_ddl
+      table_ddl.ddl as ddl
+    from table_ddl
     "
+  ddl_view: |
+    SELECT pg_get_viewdef(to_regclass('{schema}.{table}'))::text as ddl
 
 analysis:
   field_chars: |
@@ -345,6 +340,7 @@ native_type_map:
 general_type_map:
   string: "varchar"
   integer: "integer"
+  number: "decimal"
   decimal: "decimal"
   date: "date"
   datetime: "timestamp"

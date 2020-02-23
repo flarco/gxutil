@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	pq "github.com/lib/pq"
+	"github.com/spf13/cast"
 )
 
 // PostgresConn is a Postgres connection
@@ -16,14 +17,18 @@ type PostgresConn struct {
 	URL string
 }
 
-// Connect connects to a database using sqlx
-func (conn *PostgresConn) Connect() error {
-
+// Init initiates the object
+func (conn *PostgresConn) Init() error {
 	conn.BaseConn = BaseConn{
 		URL:  conn.URL,
 		Type: "postgres",
 	}
-	return conn.BaseConn.Connect()
+
+	// Turn off Bulk export for now
+	// the CopyToStdout function frequently produces error `read |0: file already closed`
+	conn.BaseConn.SetProp("allow_bulk_export", "false")
+
+	return conn.BaseConn.Init()
 }
 
 // CopyToStdout Copy TO STDOUT
@@ -48,11 +53,15 @@ func (conn *PostgresConn) CopyToStdout(sql string) (stdOutReader io.Reader, err 
 	return stdOutReader, err
 }
 
-// BulkStream uses the bulk dumping (COPY)
-func (conn *PostgresConn) BulkStream(sql string) (ds Datastream, err error) {
+// BulkExportStream uses the bulk dumping (COPY)
+func (conn *PostgresConn) BulkExportStream(sql string) (ds Datastream, err error) {
 	_, err = exec.LookPath("psql")
 	if err != nil {
 		Log("psql not found in path. Using cursor...")
+		return conn.StreamRows(sql)
+	}
+
+	if !cast.ToBool(conn.BaseConn.GetProp("allow_bulk_export")) {
 		return conn.StreamRows(sql)
 	}
 
@@ -67,8 +76,8 @@ func (conn *PostgresConn) BulkStream(sql string) (ds Datastream, err error) {
 	return ds, err
 }
 
-// InsertStream inserts a stream into a table
-func (conn *PostgresConn) InsertStream(tableFName string, ds Datastream) (count uint64, err error) {
+// BulkImportStream inserts a stream into a table
+func (conn *PostgresConn) BulkImportStream(tableFName string, ds Datastream) (count uint64, err error) {
 
 	columns := ds.GetFields()
 	schema, table := splitTableFullName(tableFName)

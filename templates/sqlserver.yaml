@@ -13,6 +13,7 @@ analysis:
 function:
   truncate_f: round({field}, 2, 1)
   truncate_datef: CONVERT(DATETIME, CONVERT(DATE, {field}))
+  sleep: waitfor delay '00:00:{seconds}.000'
 
 general_type_map:
   string: "varchar2()"

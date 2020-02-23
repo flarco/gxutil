@@ -1,10 +1,11 @@
 package gxutil
 
 import (
+	"bufio"
+	"context"
 	"encoding/csv"
 	"fmt"
 	"io"
-	"bufio"
 	"os"
 	"time"
 
@@ -103,7 +104,7 @@ func toString(val interface{}) string {
 func castVal(val interface{}, typ string) interface{} {
 	var nVal interface{}
 	switch typ {
-	case "string":
+	case "string", "text":
 		nVal = cast.ToString(val)
 	case "integer":
 		nVal = cast.ToInt64(val)
@@ -111,8 +112,8 @@ func castVal(val interface{}, typ string) interface{} {
 		nVal = cast.ToFloat64(val)
 	case "bool":
 		nVal = cast.ToBool(val)
-	// case "datetime":
-	// 	nVal = cast.ToTime(val)
+	case "datetime", "date", "timestamp":
+		nVal = cast.ToTime(val)
 	default:
 		nVal = cast.ToString(val)
 	}
@@ -130,7 +131,7 @@ func (c *CSV) ReadStream() (ds Datastream, err error) {
 	if c.File == nil && c.Reader == nil {
 		file, err := os.Open(c.Path)
 		if err != nil {
-			return ds, err
+			return ds, Error(err, "os.Open(c.Path)")
 		}
 		c.File = file
 		c.Reader = bufio.NewReader(c.File)
@@ -141,21 +142,23 @@ func (c *CSV) ReadStream() (ds Datastream, err error) {
 	// decompress if gzip
 	reader, err := Decompress(c.Reader)
 	if err != nil {
-		return ds, err
+		return ds, Error(err, "Decompress(c.Reader)")
 	}
-	
+
 	r = csv.NewReader(reader)
 
 	row0, err := r.Read()
 	if err != nil {
-		return ds, err
+		return ds, Error(err, "r.Read()")
 	} else if err == io.EOF {
 		return ds, nil
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	ds = Datastream{
 		Rows:    make(chan []interface{}),
 		Columns: c.Columns,
+		context: Context{ctx, cancel},
 	}
 
 	count := 1
@@ -168,8 +171,7 @@ func (c *CSV) ReadStream() (ds Datastream, err error) {
 			if err == io.EOF {
 				break
 			} else if err != nil {
-				Check(err, "Error reading file")
-				break
+				return ds, Error(err, "Error reading file")
 			}
 
 			row := make([]interface{}, len(row0))
@@ -212,7 +214,13 @@ func (c *CSV) ReadStream() (ds Datastream, err error) {
 			for i, val := range row0 {
 				row[i] = castVal(val, ds.Columns[i].Type)
 			}
-			ds.Rows <- row
+
+			select {
+			case <-ds.context.ctx.Done():
+				break
+			default:
+				ds.Rows <- row
+			}
 			count++
 		}
 		// Ensure that at the end of the loop we close the channel!
