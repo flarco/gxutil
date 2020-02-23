@@ -423,6 +423,7 @@ function:
   str_utf8: '{ field }'
   fill_cnt_field: count({field}) as cnt_{field}
   fill_rate_field: round(100.0 * count({field}) / count(1), 2) as prct_{field}
+  sleep: select sleep({seconds})
 
 variable:
   bind_string: "?"

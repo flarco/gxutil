@@ -122,6 +122,18 @@ metadata:
       and views.view_name = col.table_name
     where col.owner = upper('{schema}')
     order by col.owner, col.table_name, col.column_id
+  
+  sessions:
+    select s.sid, s.serial# as serial,
+    p.spid, s.username, s.schemaname, 
+    s.program, s.terminal, s.osuser
+      from v$session s
+      join v$process p
+        on s.paddr = p.addr
+    where s.type != 'BACKGROUND'
+  
+  session_terminate:
+    alter system kill session '{sid}, {serial}'
 
 analysis:
   field_stat_deep: |
@@ -200,6 +212,10 @@ function:
   str_utf8: convert({field},'US7ASCII','WE8ISO8859P1')
   date_to_int: to_number(to_char({field}, 'j'))
   number_to_int: round({field}, 0)
+  sleep: |
+    BEGIN
+      sys.DBMS_LOCK.sleep({seconds});
+    END;
 
 native_type_map:
   number: "decimal"

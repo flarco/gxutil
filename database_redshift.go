@@ -2,6 +2,7 @@ package gxutil
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io/ioutil"
 	"os"
@@ -26,7 +27,7 @@ func (conn *RedshiftConn) Init() error {
 		Type: "redshift",
 	}
 
-	return conn.BaseConn.LoadYAML()
+	return conn.BaseConn.Init()
 }
 
 func isRedshift(URL string) (isRs bool) {
@@ -51,7 +52,8 @@ func isRedshift(URL string) (isRs bool) {
 	return isRs
 }
 
-func (conn *RedshiftConn) unload(sql string) (s3Path string, err error) {
+// Unload unloads a query to S3
+func (conn *RedshiftConn) Unload(sql string) (s3Path string, err error) {
 
 	s3 := S3{
 		Bucket: conn.GetProp("s3Bucket"),
@@ -98,7 +100,7 @@ func (conn *RedshiftConn) BulkExportStream(sql string) (ds Datastream, err error
 		Bucket: conn.GetProp("s3Bucket"),
 	}
 
-	s3Path, err := conn.unload(sql)
+	s3Path, err := conn.Unload(sql)
 	if err != nil {
 		return ds, Error(err, "Could not unload.")
 	}
@@ -108,8 +110,10 @@ func (conn *RedshiftConn) BulkExportStream(sql string) (ds Datastream, err error
 		return ds, Error(err, "Could not s3.List for "+s3Path+"/")
 	}
 
+	mainCtx, cancel := context.WithCancel(context.Background())
 	ds = Datastream{
-		Rows: make(chan []interface{}, 100000), // 100000 row limit in memory
+		Rows:    make(chan []interface{}, 100000), // 100000 row limit in memory
+		context: Context{mainCtx, cancel},
 	}
 
 	decompressAndStream := func(s3PartPath string, dsMain *Datastream) {
@@ -141,7 +145,14 @@ func (conn *RedshiftConn) BulkExportStream(sql string) (ds Datastream, err error
 
 		// foward to channel, rows will came in disorder
 		for row := range dsPart.Rows {
-			dsMain.Rows <- row
+			select {
+			case <-dsMain.context.ctx.Done():
+				break
+			case <-dsPart.context.ctx.Done():
+				break
+			default:
+				dsMain.Rows <- row
+			}
 		}
 		workers--
 		done++

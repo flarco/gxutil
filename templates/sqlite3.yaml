@@ -102,6 +102,9 @@ analysis:
   fields_date_distro_wide: |
   fields_group: |
 
+function:
+  sleep: select sqlite3_sleep({seconds}*1000)
+
 # native to general
 native_type_map:
   int64: "integer"

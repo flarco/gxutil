@@ -14,5 +14,5 @@ func (conn *MsSQLServerConn) Init() error {
 		Type: "sqlserver",
 	}
 
-	return conn.BaseConn.LoadYAML()
+	return conn.BaseConn.Init()
 }

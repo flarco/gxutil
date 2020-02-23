@@ -2,6 +2,7 @@ package gxutil
 
 import (
 	"database/sql"
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -28,6 +29,7 @@ import (
 type Connection interface {
 	Init() error
 	Connect() error
+	Kill() error
 	Close() error
 	GetType() string
 	GetGormConn() (*gorm.DB, error)
@@ -36,6 +38,7 @@ type Connection interface {
 	BulkExportStream(sql string) (Datastream, error)
 	BulkImportStream(tableFName string, ds Datastream) (count uint64, err error)
 	Query(sql string) (Dataset, error)
+	QueryContext(ctx context.Context, sql string) (Dataset, error)
 	GenerateDDL(tableFName string, data Dataset) (string, error)
 	GenerateInsertStatement(tableName string, fields []string) string
 	DropTable(...string) error
@@ -47,6 +50,7 @@ type Connection interface {
 	SetProp(string, string)
 	GetProp(string) string
 	GetTemplateValue(path string) (value string)
+	Context() Context
 
 	bindVar(i int, field string) string
 	StreamRecords(sql string) (<-chan map[string]interface{}, error)
@@ -72,6 +76,7 @@ type BaseConn struct {
 	Type       string // the type of database for sqlx: postgres, mysql, sqlite
 	db         *sqlx.DB
 	Data       Dataset
+	context    Context
 	template   Template
 	schemata   Schemata
 	properties map[string]string
@@ -163,6 +168,10 @@ func getDriverName(name string) (driverName string) {
 // Init initiates the connection object
 func (conn *BaseConn) Init() (err error) {
 	conn.LoadYAML()
+	connCtx, cancel := context.WithCancel(context.Background())
+	conn.context.ctx = connCtx
+	conn.context.cancel = cancel
+	conn.SetProp("connected", "false")
 	return nil
 }
 
@@ -174,6 +183,11 @@ func (conn *BaseConn) Db() *sqlx.DB {
 // GetType returns the type db object
 func (conn *BaseConn) GetType() string {
 	return conn.Type
+}
+
+// Context returns the db context
+func (conn *BaseConn) Context() Context {
+	return conn.context
 }
 
 // Schemata returns the Schemata object
@@ -197,6 +211,13 @@ func (conn *BaseConn) SetProp(key string, val string) {
 		conn.properties = map[string]string{}
 	}
 	conn.properties[key] = val
+}
+
+// Kill kill the database connection
+func (conn *BaseConn) Kill() error {
+	conn.context.cancel()
+	conn.SetProp("connected", "false")
+	return nil
 }
 
 // Connect connects to the database
@@ -224,6 +245,8 @@ func (conn *BaseConn) Connect() error {
 	if err != nil {
 		return Error(err, "Could not ping DB")
 	}
+
+	conn.SetProp("connected", "true")
 
 	LogCGreen(R(`connected to {g}`, "g", conn.Type))
 	return nil
@@ -456,19 +479,26 @@ func (conn *BaseConn) BulkImportStream(tableFName string, ds Datastream) (count 
 
 // StreamRows the rows of a sql query, returns `result`, `error`
 func (conn *BaseConn) StreamRows(sql string) (ds Datastream, err error) {
-	start := time.Now()
+	return conn.StreamRowsContext(conn.context.ctx, sql)
+}
 
+// StreamRowsContext streams the rows of a sql query with context, returns `result`, `error`
+func (conn *BaseConn) StreamRowsContext(ctx context.Context, sql string) (ds Datastream, err error) {
+	start := time.Now()
 	if strings.TrimSpace(sql) == "" {
 		return ds, errors.New("Empty Query")
 	}
 
-	result, err := conn.db.Queryx(sql)
+	queryCtx, queryCancel := context.WithCancel(ctx)
+	result, err := conn.db.QueryxContext(queryCtx, sql)
 	if err != nil {
+		queryCancel()
 		return ds, Error(err, "SQL Error for:\n"+sql)
 	}
 
 	colTypes, err := result.ColumnTypes()
 	if err != nil {
+		queryCancel()
 		return ds, Error(err, "result.ColumnTypes()")
 	}
 
@@ -481,6 +511,7 @@ func (conn *BaseConn) StreamRows(sql string) (ds Datastream, err error) {
 	ds = Datastream{
 		Columns: conn.Data.Columns,
 		Rows:    make(chan []interface{}),
+		context: Context{queryCtx, queryCancel},
 	}
 
 	go func() {
@@ -492,7 +523,14 @@ func (conn *BaseConn) StreamRows(sql string) (ds Datastream, err error) {
 				break
 			}
 			row = processRow(row)
-			ds.Rows <- row
+
+			select {
+			case <-ds.context.ctx.Done():
+				close(ds.Rows)
+				break
+			default:
+				ds.Rows <- row
+			}
 
 		}
 		// Ensure that at the end of the loop we close the channel!
@@ -507,6 +545,21 @@ func (conn *BaseConn) StreamRows(sql string) (ds Datastream, err error) {
 func (conn *BaseConn) Query(sql string) (Dataset, error) {
 
 	ds, err := conn.StreamRows(sql)
+	if err != nil {
+		return Dataset{SQL:sql}, err
+	}
+
+	data := ds.Collect()
+	data.SQL = sql
+	data.Duration = conn.Data.Duration // Collect does not time duration
+
+	return data, nil
+}
+
+// QueryContext runs a sql query with ctx, returns `result`, `error`
+func (conn *BaseConn) QueryContext(ctx context.Context, sql string) (Dataset, error) {
+
+	ds, err := conn.StreamRowsContext(ctx, sql)
 	if err != nil {
 		return Dataset{SQL:sql}, err
 	}

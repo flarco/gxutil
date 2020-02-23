@@ -3,6 +3,7 @@ package gxutil
 import (
 	"bufio"
 	"compress/gzip"
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"fmt"
@@ -16,6 +17,12 @@ import (
 	"github.com/spf13/cast"
 )
 
+// Context is to manage context
+type Context struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
 // Datastream is a stream of rows
 type Datastream struct {
 	Columns []Column
@@ -23,6 +30,7 @@ type Datastream struct {
 	Buffer  [][]interface{}
 	count   uint64
 	closed  bool
+	context Context
 }
 
 // Dataset is a query returned dataset
@@ -109,7 +117,7 @@ func ParseString(s string) interface{} {
 	}
 
 	// boolean
-	// causes issues in SQLite and Oracle 
+	// causes issues in SQLite and Oracle
 	// b, err := strconv.ParseBool(s)
 	// if err == nil {
 	// 	return b

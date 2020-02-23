@@ -27,7 +27,7 @@ func (conn *OracleConn) Init() error {
 
 	conn.BaseConn.SetProp("allow_bulk_import", "false")
 
-	return conn.BaseConn.LoadYAML()
+	return conn.BaseConn.Init()
 }
 
 // BulkImportStream bulk import stream

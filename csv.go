@@ -2,6 +2,7 @@ package gxutil
 
 import (
 	"bufio"
+	"context"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -153,9 +154,11 @@ func (c *CSV) ReadStream() (ds Datastream, err error) {
 		return ds, nil
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	ds = Datastream{
 		Rows:    make(chan []interface{}),
 		Columns: c.Columns,
+		context: Context{ctx, cancel},
 	}
 
 	count := 1
@@ -211,7 +214,13 @@ func (c *CSV) ReadStream() (ds Datastream, err error) {
 			for i, val := range row0 {
 				row[i] = castVal(val, ds.Columns[i].Type)
 			}
-			ds.Rows <- row
+
+			select {
+			case <-ds.context.ctx.Done():
+				break
+			default:
+				ds.Rows <- row
+			}
 			count++
 		}
 		// Ensure that at the end of the loop we close the channel!

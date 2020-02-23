@@ -1,6 +1,7 @@
 package gxutil
 
 import (
+	"context"
 	"errors"
 	"os"
 	"strings"
@@ -152,11 +153,11 @@ func TestOracle(t *testing.T) {
 }
 
 func TestRedshift(t *testing.T) {
-	DBTest(t, DBs["redshift"])
+	// DBTest(t, DBs["redshift"])
 }
 
 func TestSqlServer(t *testing.T) {
-	DBTest(t, DBs["sqlserver"])
+	// DBTest(t, DBs["sqlserver"])
 }
 
 func DBTest(t *testing.T, db *testDB) {
@@ -374,7 +375,32 @@ func DBTest(t *testing.T, db *testDB) {
 	err = conn.DropTable("person", "place", "transact", "test1")
 	assert.NoError(t, err)
 
-	conn.Close()
+	if db.name != "sqlite3" {
+		// test sleep function
+		sleepSQL := R(
+			conn.GetTemplateValue("function.sleep"),
+			"seconds", "1",
+		)
+		dd, err := conn.Query(sleepSQL)
+		assert.Greater(t, dd.Duration, 1.0)
+		assert.NoError(t, err)
+
+		// Test cancel query
+		cancelDone := make(chan bool)
+		ctx, cancel := context.WithCancel(conn.Context().ctx)
+		go func() {
+			_, err := conn.QueryContext(ctx, sleepSQL)
+			assert.Error(t, err)
+			cancelDone <- true
+		}()
+
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+		<-cancelDone // wait for cancel to be done
+	}
+
+	err = conn.Close()
+	assert.NoError(t, err)
 }
 
 func ELTest(t *testing.T, db *testDB, srcTable string) {
@@ -395,7 +421,7 @@ func ELTest(t *testing.T, db *testDB, srcTable string) {
 	ddl, err := srcConn.GetDDL(srcTable)
 	assert.NoError(t, err)
 	newDdl := strings.Replace(ddl, sTable, tTable, 1)
-	if db.name == "oracle"{
+	if db.name == "oracle" {
 		newDdl = strings.Replace(
 			ddl, strings.ToUpper(sTable),
 			strings.ToUpper(tTable), 1,

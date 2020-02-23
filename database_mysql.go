@@ -49,7 +49,7 @@ func (conn *MySQLConn) Init() error {
 	conn.BaseConn.SetProp("allow_bulk_export", "false")
 	conn.BaseConn.SetProp("allow_bulk_import", "true")
 
-	return conn.BaseConn.LoadYAML()
+	return conn.BaseConn.Init()
 }
 
 // BulkInsert

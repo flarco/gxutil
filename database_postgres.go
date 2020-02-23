@@ -28,7 +28,7 @@ func (conn *PostgresConn) Init() error {
 	// the CopyToStdout function frequently produces error `read |0: file already closed`
 	conn.BaseConn.SetProp("allow_bulk_export", "false")
 
-	return conn.BaseConn.LoadYAML()
+	return conn.BaseConn.Init()
 }
 
 // CopyToStdout Copy TO STDOUT
