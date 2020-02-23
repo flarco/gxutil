@@ -526,7 +526,6 @@ func (conn *BaseConn) StreamRowsContext(ctx context.Context, sql string) (ds Dat
 
 			select {
 			case <-ds.context.ctx.Done():
-				close(ds.Rows)
 				break
 			default:
 				ds.Rows <- row
